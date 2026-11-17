@@ -14,6 +14,7 @@ import type { ModelConstructor, ModelFieldMetadata } from "@restfx/core";
 import type { Route } from "../routing/Route.js";
 import { getResourceMetadata } from "../metadata/ResourceMetadata.js";
 import { getRequestModelMetadata } from "../request/RequestModelMetadata.js";
+import { validateRequestModelRoute } from "../request/validateRequestModelRoute.js";
 import type {
   HttpResponseOptions,
   HttpResponseModel,
@@ -361,33 +362,12 @@ function getRequestModelParameters(
   if (!route.requestModel) return [];
 
   const requestModel = route.requestModel;
-  const requestMetadata = getRequestModelMetadata(requestModel);
-  const modelMetadata = getModelMetadata(requestModel);
-  if (!modelMetadata) {
-    throw new TypeError(
-      `${requestModel.name || "Model"} is not decorated with @Model`,
-    );
-  }
-
-  const routePathParameters = getRoutePathParameterNames(route.path);
+  const fields = validateRequestModelRoute(requestModel, route.path);
   const pathParameters = getPathParameterNames(path);
-  return requestMetadata.fields.flatMap((requestField) => {
-    if (requestField.source === "body") return [];
+  return fields.flatMap(({ requestField, modelField: field }) => {
     const name = requestField.name ?? requestField.property;
-    if (requestField.source === "path" && !routePathParameters.includes(name)) {
-      throw new TypeError(
-        `Path parameter ${name} from ${requestModel.name || "request model"} is not present in route ${route.path}`,
-      );
-    }
     if (requestField.source === "path" && !pathParameters.includes(name)) {
       return [];
-    }
-
-    const field = modelMetadata.fields.get(requestField.property);
-    if (!field) {
-      throw new TypeError(
-        `Request source field ${requestField.property} is missing @Field metadata`,
-      );
     }
     return [
       {

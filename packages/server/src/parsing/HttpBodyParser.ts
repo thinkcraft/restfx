@@ -12,6 +12,7 @@ import {
 import { parseJsonBody } from "./parseJsonBody.js";
 import { parseUrlEncodedBody } from "./parseUrlEncodedBody.js";
 import { getRequestContentLength } from "./getRequestContentLength.js";
+import { getSingleHeader } from "../utils/getSingleHeader.js";
 
 export class HttpBodyParser {
   async parse<T>(req: IncomingMessage, maxBytes = 1_048_576): Promise<T> {
@@ -25,7 +26,7 @@ export class HttpBodyParser {
       throw this.payloadTooLarge();
     }
 
-    const contentType = this.getSingleHeader(req, HttpHeaderName.ContentType);
+    const contentType = getSingleHeader(req, HttpHeaderName.ContentType);
     const bodyFormat = this.getBodyFormat(contentType);
     if (bodyFormat === undefined) {
       req.pause();
@@ -94,35 +95,6 @@ export class HttpBodyParser {
       case "json":
         return parseJsonBody<T>(body);
     }
-  }
-
-  private getSingleHeader(req: IncomingMessage, name: string) {
-    const normalizedName = name.toLowerCase();
-    const rawHeaders = req.rawHeaders;
-    if (rawHeaders) {
-      const values: string[] = [];
-      for (let index = 0; index < rawHeaders.length; index += 2) {
-        if (rawHeaders[index]?.toLowerCase() === normalizedName) {
-          values.push(rawHeaders[index + 1] ?? "");
-        }
-      }
-      if (values.length > 1) {
-        throw new HttpError(
-          HttpStatusCode.BadRequest,
-          `Multiple ${name} headers are not allowed`,
-        );
-      }
-      if (values.length === 1) return values[0];
-    }
-
-    const value = req.headers[normalizedName];
-    if (Array.isArray(value)) {
-      throw new HttpError(
-        HttpStatusCode.BadRequest,
-        `Multiple ${name} headers are not allowed`,
-      );
-    }
-    return value;
   }
 
   private payloadTooLarge() {

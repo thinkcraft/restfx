@@ -18,13 +18,11 @@ import { HttpStatusCode } from "../HttpStatusCode.js";
 import { HttpResult } from "../HttpResult.js";
 import { HttpHeaderName } from "../HttpHeaderName.js";
 import {
-  getModelMetadata,
   ModelValidationError,
   validateModel,
-  type ModelConstructor,
   type ValidationIssue,
 } from "@restfx/core";
-import { getRequestModelMetadata } from "../request/RequestModelMetadata.js";
+import { validateRequestModelRoute } from "../request/validateRequestModelRoute.js";
 import { getInjectedProperties } from "../metadata/InjectionMetadata.js";
 
 /** Discovers decorated resources and dispatches contexts to matching handlers. */
@@ -74,34 +72,18 @@ export class HttpRouter {
       return { ...middleware, resource };
     });
     const middlewares = [...rootMiddlewares, ...this._requestMiddlewares];
-    const invokeMiddleware = async (
-      index: number,
-    ): Promise<HttpRouterResult> => {
-      const middleware = middlewares[index];
-      if (!middleware) return this.dispatchRoute(context);
-
-      let downstream: Promise<HttpRouterResult> | undefined;
-      const next = () => {
-        if (downstream) {
-          throw new Error("HTTP middleware called next() more than once");
+    return invokeMiddlewareChain(
+      context,
+      middlewares,
+      () => this.dispatchRoute(context),
+      (result) => (result.matched ? result.value : undefined),
+      (outcome) => {
+        if (!outcome.calledNext || outcome.value !== undefined) {
+          return { matched: true, value: outcome.value };
         }
-        downstream = invokeMiddleware(index + 1);
-        return downstream.then((result) =>
-          result.matched ? result.value : undefined,
-        );
-      };
-      const value = await (middleware.handler as HttpMiddlewareHandler).call(
-        middleware.resource,
-        context,
-        next,
-      );
-
-      if (!downstream) return { matched: true, value };
-      const downstreamResult = await downstream;
-      return value === undefined ? downstreamResult : { matched: true, value };
-    };
-
-    return invokeMiddleware(0);
+        return outcome.downstream;
+      },
+    );
   }
 
   private async dispatchRoute(context: HttpContext): Promise<HttpRouterResult> {
@@ -174,30 +156,16 @@ export class HttpRouter {
         }
         return { ...middleware, resource: requestResource };
       });
-    const invokeMiddleware = async (index: number): Promise<unknown> => {
-      const middleware = routeMiddlewares[index];
-      if (!middleware) return invokeHandler();
-
-      let downstream: Promise<unknown> | undefined;
-      const next = () => {
-        if (downstream) {
-          throw new Error("HTTP middleware called next() more than once");
-        }
-        downstream = invokeMiddleware(index + 1);
-        return downstream;
-      };
-      const value = await (middleware.handler as HttpMiddlewareHandler).call(
-        middleware.resource,
-        context,
-        next,
-      );
-
-      if (!downstream) return value;
-      const downstreamValue = await downstream;
-      return value === undefined ? downstreamValue : value;
-    };
-
-    let value = await invokeMiddleware(0);
+    let value = await invokeMiddlewareChain(
+      context,
+      routeMiddlewares,
+      invokeHandler,
+      (result) => result,
+      (outcome) =>
+        !outcome.calledNext || outcome.value !== undefined
+          ? outcome.value
+          : outcome.downstream,
+    );
     if (match.route.responseModel) {
       if (value instanceof HttpResult) {
         if (value.body !== undefined) {
@@ -360,53 +328,48 @@ export class HttpRouter {
   }
 }
 
-function validateRequestModelRoute(model: ModelConstructor, path: string) {
-  const modelMetadata = getModelMetadata(model);
-  if (!modelMetadata) {
-    throw new TypeError(
-      `${model.name || "Model"} is not decorated with @Model`,
+type MiddlewareOutcome<T> =
+  | { readonly calledNext: false; readonly value: unknown }
+  | {
+      readonly calledNext: true;
+      readonly value: unknown;
+      readonly downstream: T;
+    };
+
+async function invokeMiddlewareChain<T>(
+  context: HttpContext,
+  middlewares: readonly {
+    readonly resource: object;
+    readonly handler: Function;
+  }[],
+  terminal: () => Promise<T>,
+  valueForNext: (result: T) => unknown,
+  resolve: (outcome: MiddlewareOutcome<T>) => T,
+): Promise<T> {
+  const invoke = async (index: number): Promise<T> => {
+    const middleware = middlewares[index];
+    if (!middleware) return terminal();
+
+    let downstream: Promise<T> | undefined;
+    const next = () => {
+      if (downstream) {
+        throw new Error("HTTP middleware called next() more than once");
+      }
+      downstream = invoke(index + 1);
+      return downstream.then(valueForNext);
+    };
+    const value = await (middleware.handler as HttpMiddlewareHandler).call(
+      middleware.resource,
+      context,
+      next,
     );
-  }
-  const requestMetadata = getRequestModelMetadata(model);
-  const pathParameters = new Set(
-    path
-      .split("/")
-      .filter((segment) => segment.startsWith(":"))
-      .map((segment) => segment.slice(1).replace(/[?*]$/, "")),
-  );
-  for (const field of requestMetadata.fields) {
-    if (!modelMetadata.fields.has(field.property)) {
-      throw new TypeError(
-        `Request source field ${field.property} is missing @Field metadata`,
-      );
-    }
-    if (
-      field.source === "path" &&
-      !pathParameters.has(field.name ?? field.property)
-    ) {
-      throw new TypeError(
-        `Path parameter ${field.name ?? field.property} from ${model.name || "request model"} is not present in route ${path}`,
-      );
-    }
-    if (
-      field.source === "header" &&
-      !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(field.name ?? field.property)
-    ) {
-      throw new TypeError(
-        `Header parameter ${field.name ?? field.property} is not a valid HTTP token`,
-      );
-    }
-  }
-  if (requestMetadata.body) {
-    if (
-      !requestMetadata.body.model ||
-      !getModelMetadata(requestMetadata.body.model)
-    ) {
-      throw new TypeError(
-        `@Body field ${requestMetadata.body.property} must use a class decorated with @Model`,
-      );
-    }
-  }
+
+    return downstream
+      ? resolve({ calledNext: true, value, downstream: await downstream })
+      : resolve({ calledNext: false, value });
+  };
+
+  return invoke(0);
 }
 
 function validateResponseModel(

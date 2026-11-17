@@ -17,6 +17,7 @@ import {
   type ModelConstructor,
 } from "@restfx/core";
 import { getRequestModelMetadata } from "./request/RequestModelMetadata.js";
+import { getSingleHeader } from "./utils/getSingleHeader.js";
 
 export interface HttpParseBodyOptions<T = unknown> {
   readonly maxBytes?: number;
@@ -110,41 +111,9 @@ export class HttpRequest {
   }
 
   private getSingleHeader(name: string) {
-    const normalizedName = name.toLowerCase();
-    const values: string[] = [];
-    const rawHeaders = this.req.rawHeaders;
-
-    if (rawHeaders) {
-      for (let index = 0; index < rawHeaders.length; index += 2) {
-        if (rawHeaders[index]?.toLowerCase() === normalizedName) {
-          values.push(rawHeaders[index + 1] ?? "");
-        }
-      }
-    }
-
-    if (values.length > 1) {
-      throw new HttpError(
-        HttpStatusCode.BadRequest,
-        `Multiple ${name} headers are not allowed`,
-      );
-    }
-
-    const value = values[0] ?? this.req.headers[normalizedName];
-    if (Array.isArray(value)) {
-      throw new HttpError(
-        HttpStatusCode.BadRequest,
-        `Multiple ${name} headers are not allowed`,
-      );
-    }
-
-    if (value?.includes(",")) {
-      throw new HttpError(
-        HttpStatusCode.BadRequest,
-        `Multiple ${name} values are not allowed`,
-      );
-    }
-
-    return value;
+    return getSingleHeader(this.req, name, {
+      rejectCommaSeparatedValues: true,
+    });
   }
 
   private validateProtocol(value: string) {

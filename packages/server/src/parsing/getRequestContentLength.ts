@@ -2,6 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { HttpError } from "../HttpError.js";
 import { HttpHeaderName } from "../HttpHeaderName.js";
 import { HttpStatusCode } from "../HttpStatusCode.js";
+import { getSingleHeader } from "../utils/getSingleHeader.js";
 
 export function getRequestContentLength(req: IncomingMessage) {
   const contentLength = getSingleHeader(req, HttpHeaderName.ContentLength);
@@ -42,33 +43,4 @@ export function getRequestContentLength(req: IncomingMessage) {
     );
   }
   return parsedLength;
-}
-
-function getSingleHeader(req: IncomingMessage, name: string) {
-  const normalizedName = name.toLowerCase();
-  const rawHeaders = req.rawHeaders;
-  if (rawHeaders) {
-    const values: string[] = [];
-    for (let index = 0; index < rawHeaders.length; index += 2) {
-      if (rawHeaders[index]?.toLowerCase() === normalizedName) {
-        values.push(rawHeaders[index + 1] ?? "");
-      }
-    }
-    if (values.length > 1) {
-      throw new HttpError(
-        HttpStatusCode.BadRequest,
-        `Multiple ${name} headers are not allowed`,
-      );
-    }
-    if (values.length === 1) return values[0];
-  }
-
-  const value = req.headers[normalizedName];
-  if (Array.isArray(value)) {
-    throw new HttpError(
-      HttpStatusCode.BadRequest,
-      `Multiple ${name} headers are not allowed`,
-    );
-  }
-  return value;
 }
