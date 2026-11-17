@@ -108,7 +108,7 @@ describe("API client generator", () => {
     const generated = generateClient(document, { models: "./models.js" });
     assert.match(generated, /import \{[^}]*CatEvent/s);
     assert.match(generated, /import \{[^}]*DogEvent/s);
-    assert.match(generated, /as CatEvent \| DogEvent/);
+    assert.match(generated, /runtime\.sendRequest<CatEvent \| DogEvent>/);
   });
 
   it("generates model imports and validates requests before fetch", async () => {
@@ -126,10 +126,9 @@ describe("API client generator", () => {
       generated,
       /validateModel\(requestInput, CreateRecordRequest\)/,
     );
-    assert.ok(
-      generated.indexOf("validateModel(requestInput") <
-        generated.indexOf("client.request("),
-    );
+    assert.match(generated, /createApiClientRuntime/);
+    assert.doesNotMatch(generated, /if \(!response\.ok\)/);
+    assert.doesNotMatch(generated, /async function readResponseBody/);
 
     await writeFile(generatedPath, generated, "utf8");
     try {
@@ -173,6 +172,27 @@ describe("API client generator", () => {
         "http://example.test/records/550e8400-e29b-41d4-a716-446655440000",
       );
       assert.equal(response.id, "550e8400-e29b-41d4-a716-446655440000");
+
+      const failedApi = generatedClient.createApiClient({
+        baseUrl: "http://example.test",
+        fetch: async () =>
+          new Response(JSON.stringify({ message: "Rejected" }), {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          }),
+      });
+      await assert.rejects(
+        failedApi.records.create({
+          id: "550e8400-e29b-41d4-a716-446655440000",
+          payload: { name: "valid" },
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof generatedClient.ApiError);
+          assert.equal(error.status, 400);
+          assert.deepEqual(error.body, { message: "Rejected" });
+          return true;
+        },
+      );
     } finally {
       await unlink(generatedPath).catch(() => undefined);
     }
