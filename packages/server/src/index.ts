@@ -14,6 +14,8 @@ export type {
 } from "./HttpServer.js";
 export { HttpRouter } from "./routing/HttpRouter.js";
 export { HttpContext } from "./HttpContext.js";
+export { HttpCookies } from "./HttpCookies.js";
+export type { HttpCookieOptions } from "./HttpCookies.js";
 export { HttpError } from "./HttpError.js";
 export { HttpRequest } from "./HttpRequest.js";
 export type { HttpRequestBodyStreamOptions } from "./parsing/createRequestBodyStream.js";

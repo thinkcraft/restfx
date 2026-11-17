@@ -138,6 +138,41 @@ options?)` supports other method names with the same options shape. Route
 `context.req.url` is a `URL`; `context.req.path` is its pathname without the
 query string. `context.req.params` contains decoded route parameters as strings.
 
+### Cookies
+
+Use `context.cookies` to read request cookies and add response cookies. Values
+are percent-decoded when read and percent-encoded when set. `get(name)` returns
+`undefined` when absent and rejects duplicate names as ambiguous; use
+`getAll(name)` when repeated values are expected. `set()` appends a separate
+`Set-Cookie` header, and `clear()` expires the cookie. Pass the same `path` and
+`domain` used when setting a cookie to clear that specific cookie:
+
+```ts
+@HttpPost({ path: "login" })
+login(context: HttpContext) {
+  context.cookies.set("session", createSessionToken(), {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60,
+  });
+  return { ok: true };
+}
+
+@HttpPost({ path: "logout" })
+logout(context: HttpContext) {
+  context.cookies.clear("session", { path: "/" });
+  return { ok: true };
+}
+```
+
+`HttpCookieOptions` supports `maxAge` (seconds), `expires`, `domain`, `path`,
+`httpOnly`, `secure`, and `sameSite`. `SameSite=None` and the `__Secure-` and
+`__Host-` cookie prefixes enforce their required `Secure`/scope settings. This
+API handles cookie transport only; session storage and signing are application
+concerns. Malformed request cookie headers return `400` when cookies are read.
+
 ## Route parameters and HTTP methods
 
 Parameters use a colon-prefixed name and are required by default:
