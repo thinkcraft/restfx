@@ -3,14 +3,21 @@ import { HttpHeaderName } from "./HttpHeaderName.js";
 import { HttpBodyParser } from "./parsing/HttpBodyParser.js";
 import { HttpError } from "./HttpError.js";
 import { HttpStatusCode } from "./HttpStatusCode.js";
+import {
+  createRequestBodyStream,
+  type HttpRequestBodyStreamOptions,
+} from "./parsing/createRequestBodyStream.js";
 
 export class HttpRequest {
   private _body?: Promise<unknown>;
   private _bodyParser?: HttpBodyParser;
+  private _bodyMode: "unused" | "buffered" | "stream" = "unused";
+  private readonly _abortController = new AbortController();
 
   readonly method: string;
   readonly url: URL;
   readonly path: string;
+  readonly signal = this._abortController.signal;
   params: Record<string, string> = {};
 
   get headers() {
@@ -25,6 +32,15 @@ export class HttpRequest {
     readonly req: IncomingMessage,
     trustProxy = false,
   ) {
+    if (this.req.aborted) {
+      this.abortRequest();
+    } else {
+      this.req.once("aborted", this.abortRequest);
+      this.req.once("end", () => {
+        this.req.off("aborted", this.abortRequest);
+      });
+    }
+
     this.method = this.req.method?.toUpperCase() ?? "GET";
 
     const forwardedProto = trustProxy
@@ -139,6 +155,11 @@ export class HttpRequest {
   }
 
   async parseBody<T>(maxBytes = 1_048_576): Promise<T> {
+    if (this._bodyMode === "stream") {
+      throw new Error("The request body has already been claimed as a stream");
+    }
+    this._bodyMode = "buffered";
+
     if (this._body === undefined) {
       this._body = (this._bodyParser ??= new HttpBodyParser()).parse<T>(
         this.req,
@@ -148,4 +169,22 @@ export class HttpRequest {
 
     return (await this._body) as T;
   }
+
+  /**
+   * Returns a one-shot, bounded stream of the raw request body. The default
+   * limit is 1 MiB. Use parseBody() instead for buffered form or JSON payloads.
+   */
+  streamBody(options: HttpRequestBodyStreamOptions = {}) {
+    if (this._bodyMode !== "unused") {
+      throw new Error("The request body has already been claimed");
+    }
+    this._bodyMode = "stream";
+    return createRequestBodyStream(this.req, options);
+  }
+
+  private readonly abortRequest = () => {
+    const error = new Error("The client aborted the request");
+    error.name = "AbortError";
+    this._abortController.abort(error);
+  };
 }

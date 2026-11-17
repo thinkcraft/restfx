@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import type { IncomingMessage } from "node:http";
 import { Readable } from "node:stream";
 import { describe, it } from "node:test";
-import { HttpBodyParser, HttpError, HttpStatusCode } from "../src";
+import { HttpBodyParser, HttpError, HttpRequest, HttpStatusCode } from "../src";
 
 function createRequest(
   chunks: Buffer[],
@@ -391,5 +391,64 @@ describe("HttpBodyParser", () => {
     const request = createRequest([]);
 
     await assert.rejects(() => parser.parse(request, -1), RangeError);
+  });
+});
+
+describe("HttpRequest raw body streams", () => {
+  it("streams bodies without a Content-Length and enforces the byte limit", async () => {
+    const request = new HttpRequest(
+      createRequest(
+        [Buffer.from("1234"), Buffer.from("5678")],
+        undefined,
+        "application/octet-stream",
+      ),
+    );
+    const body = request.streamBody({ maxBytes: 5 });
+
+    await assert.rejects(
+      async () => {
+        for await (const _chunk of body) {
+          // Consume the stream to exercise the incremental size check.
+        }
+      },
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.PayloadTooLarge,
+    );
+  });
+
+  it("validates streamed Content-Length after the body ends", async () => {
+    const request = new HttpRequest(
+      createRequest([Buffer.from("abc")], 4, "application/octet-stream"),
+    );
+
+    await assert.rejects(
+      async () => {
+        for await (const _chunk of request.streamBody()) {
+          // Consume the stream so its final length check runs.
+        }
+      },
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest &&
+        error.message === "Request body length does not match Content-Length",
+    );
+  });
+
+  it("does not allow the body to be claimed more than once", async () => {
+    const request = new HttpRequest(
+      createRequest([Buffer.from("abc")], 3, "application/octet-stream"),
+    );
+    const body = request.streamBody();
+
+    assert.throws(() => request.streamBody(), /already been claimed/);
+    await assert.rejects(
+      request.parseBody(),
+      /already been claimed as a stream/,
+    );
+
+    for await (const _chunk of body) {
+      // Drain the one allowed consumer.
+    }
   });
 });

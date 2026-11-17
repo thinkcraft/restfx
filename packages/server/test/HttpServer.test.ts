@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { get as httpGet, ServerResponse } from "node:http";
+import {
+  get as httpGet,
+  request as httpRequest,
+  ServerResponse,
+} from "node:http";
 import type { IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
+import { Writable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { after, before, describe, it } from "node:test";
 import {
   HttpContext,
@@ -11,6 +17,7 @@ import {
   HttpMiddleware,
   HttpMethod,
   HttpPost,
+  HttpPut,
   HttpResource,
   HttpResult,
   HttpServer,
@@ -110,6 +117,41 @@ class UsersResource {
   @HttpGet()
   list() {
     return [{ id: "u1" }];
+  }
+}
+
+class UploadResource {
+  @HttpPut(":id/content")
+  async upload(context: HttpContext) {
+    let bytes = 0;
+    let chunks = 0;
+    const sink = new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        bytes += chunk.byteLength;
+        chunks++;
+        callback();
+      },
+    });
+
+    await pipeline(context.req.streamBody({ maxBytes: 16 }), sink, {
+      signal: context.signal,
+    });
+
+    return { id: context.req.params.id, bytes, chunks };
+  }
+
+  @HttpPut("limited")
+  async limited(context: HttpContext) {
+    await pipeline(
+      context.req.streamBody({ maxBytes: 4 }),
+      new Writable({
+        write(_chunk, _encoding, callback) {
+          callback();
+        },
+      }),
+      { signal: context.signal },
+    );
+    return { uploaded: true };
   }
 }
 
@@ -253,6 +295,9 @@ class TestApi {
 
   @HttpResource()
   readonly users = new UsersResource();
+
+  @HttpResource()
+  readonly uploads = new UploadResource();
 }
 
 const middlewareTrace: string[] = [];
@@ -418,6 +463,64 @@ describe("HttpServer resource decorators", () => {
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), [...payload]);
+  });
+
+  it("streams raw binary request bodies to a handler destination", async () => {
+    const payload = Buffer.from([0x00, 0xff, 0x80, 0x41, 0x00, 0x7f]);
+    const response = await fetch(`${baseUrl}/api/uploads/object-1/content`, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: payload,
+    });
+
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.id, "object-1");
+    assert.equal(result.bytes, payload.byteLength);
+    assert.ok(result.chunks > 0);
+  });
+
+  it("returns 413 when a declared raw upload exceeds its stream limit", async () => {
+    const response = await fetch(`${baseUrl}/api/uploads/limited`, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: Buffer.from("12345"),
+    });
+
+    assert.equal(response.status, 413);
+    assert.equal(response.headers.get("connection"), "close");
+    assert.deepEqual(await response.json(), {
+      message: "Request body exceeds the maximum allowed size",
+    });
+  });
+
+  it("enforces raw upload limits while receiving chunked bodies", async () => {
+    const response = await new Promise<IncomingMessage>((resolve, reject) => {
+      const outgoing = httpRequest(
+        `${baseUrl}/api/uploads/limited`,
+        {
+          method: "PUT",
+          headers: {
+            "content-type": "application/octet-stream",
+            "transfer-encoding": "chunked",
+          },
+        },
+        resolve,
+      );
+      outgoing.once("error", reject);
+      outgoing.write("123");
+      outgoing.end("456");
+    });
+    const chunks: Buffer[] = [];
+    for await (const chunk of response) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+
+    assert.equal(response.statusCode, 413);
+    assert.equal(response.headers.connection, "close");
+    assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), {
+      message: "Request body exceeds the maximum allowed size",
+    });
   });
 
   it("returns 400 for malformed JSON request bodies", async () => {

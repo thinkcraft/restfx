@@ -11,6 +11,7 @@ export { HttpRouter } from "./routing/HttpRouter.js";
 export { HttpContext } from "./HttpContext.js";
 export { HttpError } from "./HttpError.js";
 export { HttpRequest } from "./HttpRequest.js";
+export type { HttpRequestBodyStreamOptions } from "./parsing/createRequestBodyStream.js";
 export { HttpResponse } from "./HttpResponse.js";
 export { HttpResult } from "./HttpResult.js";
 export { HttpStatusCode } from "./HttpStatusCode.js";

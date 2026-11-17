@@ -11,6 +11,7 @@ import {
 } from "./parseMultipartBody.js";
 import { parseJsonBody } from "./parseJsonBody.js";
 import { parseUrlEncodedBody } from "./parseUrlEncodedBody.js";
+import { getRequestContentLength } from "./getRequestContentLength.js";
 
 export class HttpBodyParser {
   async parse<T>(req: IncomingMessage, maxBytes = 1_048_576): Promise<T> {
@@ -18,7 +19,7 @@ export class HttpBodyParser {
       throw new RangeError("maxBytes must be a non-negative safe integer");
     }
 
-    const contentLength = this.getContentLength(req);
+    const contentLength = getRequestContentLength(req);
     if (contentLength !== undefined && contentLength > maxBytes) {
       req.pause();
       throw this.payloadTooLarge();
@@ -93,50 +94,6 @@ export class HttpBodyParser {
       case "json":
         return parseJsonBody<T>(body);
     }
-  }
-
-  private getContentLength(req: IncomingMessage) {
-    const contentLength = this.getSingleHeader(
-      req,
-      HttpHeaderName.ContentLength,
-    );
-    const transferEncoding = this.getSingleHeader(req, "transfer-encoding");
-
-    if (contentLength !== undefined && transferEncoding !== undefined) {
-      throw new HttpError(
-        HttpStatusCode.BadRequest,
-        "Content-Length and Transfer-Encoding cannot be used together",
-      );
-    }
-
-    if (transferEncoding !== undefined) {
-      const encodings = transferEncoding
-        .split(",")
-        .map((encoding) => encoding.trim().toLowerCase());
-      if (encodings.length !== 1 || encodings[0] !== "chunked") {
-        throw new HttpError(
-          HttpStatusCode.BadRequest,
-          "Invalid Transfer-Encoding header",
-        );
-      }
-    }
-
-    if (contentLength === undefined) return undefined;
-    if (!/^\d+$/.test(contentLength)) {
-      throw new HttpError(
-        HttpStatusCode.BadRequest,
-        "Invalid Content-Length header",
-      );
-    }
-
-    const parsedLength = Number(contentLength);
-    if (!Number.isSafeInteger(parsedLength)) {
-      throw new HttpError(
-        HttpStatusCode.BadRequest,
-        "Invalid Content-Length header",
-      );
-    }
-    return parsedLength;
   }
 
   private getSingleHeader(req: IncomingMessage, name: string) {

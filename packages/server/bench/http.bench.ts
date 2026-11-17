@@ -10,7 +10,7 @@ import {
   HttpPost,
   HttpResource,
   HttpServer,
-} from "../src/index.js";
+} from "../src";
 
 const iterations = readPositiveInteger("BENCH_ITERATIONS", 1_000);
 const samples = readPositiveInteger("BENCH_SAMPLES", 3);
@@ -58,6 +58,7 @@ class ParsingResource {
 }
 
 class ResponseResource {
+  // noinspection JSUnusedLocalSymbols
   private readonly binaryBody = Buffer.alloc(16 * 1024, 0x62);
 
   @HttpGet("json")

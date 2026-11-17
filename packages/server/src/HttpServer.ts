@@ -91,7 +91,7 @@ export class HttpServer {
 
       await this.sendResult(res, result.value, req.method === "HEAD");
     } catch (error) {
-      if (res.writableEnded) return;
+      if (req.aborted || res.destroyed || res.writableEnded) return;
       if (res.headersSent) {
         res.destroy(error instanceof Error ? error : undefined);
         return;

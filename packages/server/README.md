@@ -187,6 +187,41 @@ Missing or unsupported content types return `415`. Malformed bodies, invalid
 framing, and interrupted requests return `400`; bodies over the configured
 limit return `413`.
 
+### Raw streaming uploads
+
+For large uploads, send one binary object per request and consume the raw body
+as a stream instead of using multipart forms. `context.req.streamBody()` returns
+a one-shot Node readable stream; it defaults to the same 1 MiB size limit as
+`parseBody()`. Set `maxBytes` for a larger upload. Pipe it directly to a file,
+socket, or storage client to preserve backpressure:
+
+```ts
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
+
+@HttpPut(":id/content")
+async upload(context: HttpContext) {
+  const destination = createWriteStream(
+    serverGeneratedPath(context.req.params.id),
+    { flags: "wx" },
+  );
+
+  await pipeline(
+    context.req.streamBody({ maxBytes: 500 * 1024 * 1024 }),
+    destination,
+    { signal: context.signal },
+  );
+
+  return new HttpResult(201);
+}
+```
+
+The request body can be consumed only once, either with `streamBody()` or
+`parseBody()`. The stream limit is checked against both `Content-Length` and
+bytes actually received. Multipart form parsing remains buffered and should be
+reserved for smaller payloads. Treat client-provided filenames and content
+types as untrusted; choose storage paths on the server.
+
 ## Reverse proxies
 
 Forwarded headers are ignored by default. To use `X-Forwarded-Host` and
