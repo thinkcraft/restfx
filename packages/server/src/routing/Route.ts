@@ -1,3 +1,5 @@
+import type { ModelConstructor } from "@framework/core";
+
 export interface Route {
   readonly method: string;
   readonly path: string;
@@ -5,6 +7,8 @@ export interface Route {
   readonly resource: object;
   readonly handler: Function;
   readonly middlewares: readonly RouteMiddleware[];
+  readonly bodyModel?: ModelConstructor;
+  readonly responseModel?: ModelConstructor;
 }
 
 export interface RouteMiddleware {

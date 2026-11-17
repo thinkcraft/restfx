@@ -16,6 +16,7 @@ import { getPathSpecificity } from "./getPathSpecificity.js";
 import { HttpStatusCode } from "../HttpStatusCode.js";
 import { HttpResult } from "../HttpResult.js";
 import { HttpHeaderName } from "../HttpHeaderName.js";
+import { validateModel } from "@framework/core";
 
 /** Discovers decorated resources and dispatches contexts to matching handlers. */
 export class HttpRouter {
@@ -67,8 +68,12 @@ export class HttpRouter {
     }
 
     context.req.params = match.params;
-    const invokeHandler = () =>
-      Promise.resolve(match.route.handler.call(match.route.resource, context));
+    const invokeHandler = async () => {
+      if (match.route.bodyModel) {
+        await context.req.parseBody({ model: match.route.bodyModel });
+      }
+      return await match.route.handler.call(match.route.resource, context);
+    };
     const invokeMiddleware = async (index: number): Promise<unknown> => {
       const middleware = match.route.middlewares[index];
       if (!middleware) return invokeHandler();
@@ -92,7 +97,24 @@ export class HttpRouter {
       return value === undefined ? downstreamValue : value;
     };
 
-    const value = await invokeMiddleware(0);
+    let value = await invokeMiddleware(0);
+    if (match.route.responseModel) {
+      if (value instanceof HttpResult) {
+        if (value.body !== undefined) {
+          value = new HttpResult(
+            value.status,
+            validateModel(value.body, match.route.responseModel, {
+              unknownFields: "strip",
+            }),
+            value.headers,
+          );
+        }
+      } else {
+        value = validateModel(value, match.route.responseModel, {
+          unknownFields: "strip",
+        });
+      }
+    }
     return { matched: true, value };
   }
 
@@ -143,6 +165,8 @@ export class HttpRouter {
           resource,
           handler,
           middlewares,
+          bodyModel: handlerMetadata.bodyModel,
+          responseModel: handlerMetadata.responseModel,
         });
       }
 

@@ -34,3 +34,28 @@ export {
   HttpPost,
   HttpPut,
 } from "./decorators/HttpMethod.js";
+export type { HttpRouteOptions } from "./decorators/HttpMethod.js";
+export type { HttpParseBodyOptions } from "./HttpRequest.js";
+export {
+  ArrayOf,
+  BooleanField,
+  Email,
+  Field,
+  IntegerField,
+  Model,
+  ModelValidationError,
+  NumberField,
+  StringField,
+  getModelMetadata,
+  validateModel,
+} from "@framework/core";
+export type {
+  FieldOptions,
+  FieldType,
+  FieldTypeConstructor,
+  ModelConstructor,
+  ModelFieldMetadata,
+  ModelMetadata,
+  ModelOptions,
+  ValidationIssue,
+} from "@framework/core";

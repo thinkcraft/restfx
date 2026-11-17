@@ -1,4 +1,5 @@
 import type { HttpContext } from "../HttpContext.js";
+import type { ModelConstructor } from "@framework/core";
 
 export interface NestedResourceMetadata {
   readonly key: string | symbol;
@@ -10,6 +11,8 @@ export interface HttpHandlerMetadata {
   readonly method: string;
   readonly path?: string;
   readonly name: string | symbol;
+  readonly bodyModel?: ModelConstructor;
+  readonly responseModel?: ModelConstructor;
 }
 
 export type HttpMiddlewareHandler = (

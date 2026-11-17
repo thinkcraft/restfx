@@ -21,7 +21,35 @@ import {
   HttpResource,
   HttpResult,
   HttpServer,
+  Email,
+  Field,
+  Model,
+  StringField,
 } from "../src";
+
+@Model()
+class CreateUserModel {
+  @Field({ type: Email })
+  email!: string;
+
+  @Field({ type: StringField, minLength: 2, maxLength: 40 })
+  name!: string;
+
+  @Field({ type: StringField, optional: true })
+  nickname?: string;
+}
+
+@Model()
+class UserResponseModel {
+  @Field({ type: StringField })
+  id!: string;
+
+  @Field({ type: Email })
+  email!: string;
+
+  @Field({ type: StringField })
+  name!: string;
+}
 
 class PostsResource {
   @HttpGet()
@@ -117,6 +145,22 @@ class UsersResource {
   @HttpGet()
   list() {
     return [{ id: "u1" }];
+  }
+
+  @HttpPost("", { body: CreateUserModel, response: UserResponseModel })
+  async create(context: HttpContext) {
+    const input = await context.req.parseBody<CreateUserModel>();
+    return {
+      id: "u2",
+      email: input.email,
+      name: input.name,
+      internalRole: "admin",
+    };
+  }
+
+  @HttpGet("invalid-response", { response: UserResponseModel })
+  invalidResponse() {
+    return { id: 123, email: "not-an-email", name: "Invalid" };
   }
 }
 
@@ -377,6 +421,50 @@ describe("HttpServer resource decorators", () => {
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), [{ id: 1, title: "First post" }]);
+  });
+
+  it("validates request models and strips undeclared response fields", async () => {
+    const response = await fetch(`${baseUrl}/api/users`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "jane@example.com",
+        name: "Jane",
+        role: "admin",
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      id: "u2",
+      email: "jane@example.com",
+      name: "Jane",
+    });
+  });
+
+  it("returns structured validation issues for invalid request models", async () => {
+    const response = await fetch(`${baseUrl}/api/users`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "not-an-email", name: "J", extra: true }),
+    });
+
+    assert.equal(response.status, 422);
+    const result = await response.json();
+    assert.equal(result.message, "Request body failed model validation");
+    assert.deepEqual(
+      result.details.map((issue: { path: string }) => issue.path).sort(),
+      ["email", "name"],
+    );
+  });
+
+  it("returns a generic server error when a response violates its model", async () => {
+    const response = await fetch(`${baseUrl}/api/users/invalid-response`);
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      message: "Internal Server Error",
+    });
   });
 
   it("dispatches to handlers on nested route", async () => {

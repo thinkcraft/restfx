@@ -7,11 +7,23 @@ import {
   createRequestBodyStream,
   type HttpRequestBodyStreamOptions,
 } from "./parsing/createRequestBodyStream.js";
+import {
+  ModelValidationError,
+  validateModel,
+  type ModelConstructor,
+} from "@framework/core";
+
+export interface HttpParseBodyOptions<T = unknown> {
+  readonly maxBytes?: number;
+  readonly model?: ModelConstructor<T>;
+}
 
 export class HttpRequest {
   private _body?: Promise<unknown>;
   private _bodyParser?: HttpBodyParser;
   private _bodyMode: "unused" | "buffered" | "stream" = "unused";
+  private _bodyModel?: ModelConstructor;
+  private _validatedBody?: Promise<unknown>;
   private readonly _abortController = new AbortController();
 
   readonly method: string;
@@ -154,17 +166,50 @@ export class HttpRequest {
     }
   }
 
-  async parseBody<T>(maxBytes = 1_048_576): Promise<T> {
+  async parseBody<T>(maxBytes?: number): Promise<T>;
+  async parseBody<T>(options?: HttpParseBodyOptions<T>): Promise<T>;
+  async parseBody<T>(
+    maxBytesOrOptions: number | HttpParseBodyOptions<T> = 1_048_576,
+  ): Promise<T> {
     if (this._bodyMode === "stream") {
       throw new Error("The request body has already been claimed as a stream");
     }
     this._bodyMode = "buffered";
 
+    const options =
+      typeof maxBytesOrOptions === "number"
+        ? { maxBytes: maxBytesOrOptions }
+        : maxBytesOrOptions;
+    if (options.model) {
+      if (this._bodyModel && this._bodyModel !== options.model) {
+        throw new Error("The request body already has a different model");
+      }
+      this._bodyModel = options.model;
+    }
+
     if (this._body === undefined) {
       this._body = (this._bodyParser ??= new HttpBodyParser()).parse<T>(
         this.req,
-        maxBytes,
+        options.maxBytes,
       );
+    }
+
+    if (this._bodyModel) {
+      this._validatedBody ??= this._body.then((body) => {
+        try {
+          return validateModel(body, this._bodyModel!);
+        } catch (error) {
+          if (error instanceof ModelValidationError) {
+            throw new HttpError(
+              HttpStatusCode.UnprocessableEntity,
+              "Request body failed model validation",
+              error.issues,
+            );
+          }
+          throw error;
+        }
+      });
+      return (await this._validatedBody) as T;
     }
 
     return (await this._body) as T;

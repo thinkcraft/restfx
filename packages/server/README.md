@@ -93,7 +93,9 @@ with an error response.
   instance fields are supported.
 - `@HttpGet(path?)`, `@HttpPost(path?)`, `@HttpPut(path?)`,
   `@HttpPatch(path?)`, and `@HttpDelete(path?)` register method handlers.
-  `@HttpMethod(method, path?)` supports other method names.
+  `@HttpMethod(method, path?)` supports other method names. Each method
+  decorator can also receive route options, including request and response
+  models.
 - The router invokes handlers with an `HttpContext`. `context.req` exposes the
   request and `context.res` exposes the response.
 
@@ -186,6 +188,52 @@ used to describe these results.
 Missing or unsupported content types return `415`. Malformed bodies, invalid
 framing, and interrupted requests return `400`; bodies over the configured
 limit return `413`.
+
+### Shared models
+
+`@Model` and `@Field` are exported by `@framework/core` and can be shared by
+server and browser code. Field types encapsulate reusable validation rules;
+field options describe presence, defaults, constraints, and documentation:
+
+```ts
+import { Email, Field, Model, StringField } from "@framework/core";
+
+@Model()
+class CreateUser {
+  @Field({ type: Email })
+  email!: string;
+
+  @Field({ type: StringField, minLength: 2, maxLength: 80 })
+  name!: string;
+
+  @Field({ type: StringField, optional: true, description: "Display name" })
+  nickname?: string;
+}
+```
+
+Fields are required unless `optional: true`; `nullable: true` separately allows
+an explicit `null`. A `default` is applied only when a field is omitted. Other
+field options include `minimum`, `maximum`, `pattern`, `minItems`, `maxItems`,
+`uniqueItems`, `examples`, and `deprecated`. `ArrayOf(FieldType)` composes item
+validation. Undeclared fields are stripped by default, so only explicitly
+modeled values reach application code. Set `@Model({ unknownFields: "reject" })`
+to reject input containing undeclared fields instead.
+
+Attach models to routes to validate buffered request bodies and shape JSON
+responses:
+
+```ts
+@HttpPost("users", { body: CreateUser, response: UserResponse })
+async create(context: HttpContext) {
+  const input = await context.req.parseBody<CreateUser>();
+  return createUser(input);
+}
+```
+
+The server validates a declared request model before invoking the handler;
+invalid model data returns `422` with field-path issues. Response models validate
+JSON results and strip undeclared fields. They do not apply to raw streamed
+responses or streamed request bodies.
 
 ### Raw streaming uploads
 
