@@ -125,7 +125,10 @@ with an error response.
   case, the field's explicit path takes precedence over the child's class path,
   followed by the field name as a fallback.
 - Child resources can be supplied as instances or constructors. Static and
-  instance fields are supported.
+  instance fields are supported. For each matched request, the server creates a
+  fresh instance of the matched resource using its no-argument constructor, so
+  state on the supplied instance is not copied. The handler and leaf-level
+  middleware use that fresh instance; ancestor resources remain shared.
 - `@HttpGet(options?)`, `@HttpPost(options?)`, `@HttpPut(options?)`,
   `@HttpPatch(options?)`, and `@HttpDelete(options?)` register method handlers.
   Set the optional route path in that config object, for example

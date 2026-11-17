@@ -21,7 +21,7 @@ const durationSeconds = readInteger("LOAD_DURATION_SECONDS", 60, 1);
 const warmupSeconds = readInteger("LOAD_WARMUP_SECONDS", 10, 0);
 const concurrency = readInteger("LOAD_CONCURRENCY", 16, 1);
 const sampleSeconds = readInteger("LOAD_SAMPLE_SECONDS", 5, 1);
-const forceGc = readBoolean("LOAD_FORCE_GC", true);
+const forceGc = readBoolean("LOAD_FORCE_GC", false);
 const maxHeapGrowthMb = readOptionalNumber("LOAD_MAX_HEAP_GROWTH_MB");
 
 const latencyBoundsMs = [

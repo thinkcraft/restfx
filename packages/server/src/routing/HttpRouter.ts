@@ -124,17 +124,24 @@ export class HttpRouter {
     }
 
     context.req.params = match.params;
+    const resource = new (
+      match.route.resource.constructor as ResourceConstructor
+    )();
     const invokeHandler = async () => {
       if (match.route.requestModel) {
         await context.req.model(match.route.requestModel);
       } else if (match.route.bodyModel) {
         await context.req.parseBody({ model: match.route.bodyModel });
       }
-      return await match.route.handler.call(match.route.resource, context);
+      return await match.route.handler.call(resource, context);
     };
-    const routeMiddlewares = match.route.middlewares.slice(
-      this._rootMiddlewares.length,
-    );
+    const routeMiddlewares = match.route.middlewares
+      .slice(this._rootMiddlewares.length)
+      .map((middleware) =>
+        middleware.resource === match.route.resource
+          ? { ...middleware, resource }
+          : middleware,
+      );
     const invokeMiddleware = async (index: number): Promise<unknown> => {
       const middleware = routeMiddlewares[index];
       if (!middleware) return invokeHandler();

@@ -388,9 +388,22 @@ class StreamingBehaviorResource {
   }
 }
 
+@HttpResource("state")
+class StatefulResource {
+  private count = 0;
+
+  @HttpGet()
+  get() {
+    this.count++;
+    return { count: this.count };
+  }
+}
+
 @HttpResource("api")
 class TestApi {
   static readonly posts = new PostsResource();
+
+  readonly state = new StatefulResource();
 
   @HttpResource()
   readonly users = new UsersResource();
@@ -513,6 +526,18 @@ describe("HttpServer resource decorators", () => {
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), [{ id: 1, title: "First post" }]);
+  });
+
+  it("creates a fresh instance of the matched resource for each request", async () => {
+    const responses = await Promise.all([
+      fetch(`${baseUrl}/api/state`),
+      fetch(`${baseUrl}/api/state`),
+    ]);
+
+    assert.deepEqual(
+      await Promise.all(responses.map((response) => response.json())),
+      [{ count: 1 }, { count: 1 }],
+    );
   });
 
   it("validates request models and strips undeclared response fields", async () => {
