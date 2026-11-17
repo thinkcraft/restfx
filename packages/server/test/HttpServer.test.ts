@@ -38,6 +38,24 @@ class PostsResource {
     ];
   }
 
+  @HttpGet("required/:id/value")
+  getRequiredPost(ctx: HttpContext) {
+    return { id: ctx.req.params.id };
+  }
+
+  @HttpGet("optional/:id?")
+  getOptionalPost(ctx: HttpContext) {
+    return {
+      hasId: Object.hasOwn(ctx.req.params, "id"),
+      id: ctx.req.params.id ?? null,
+    };
+  }
+
+  @HttpGet("files/:path*")
+  getFilePath(ctx: HttpContext) {
+    return { path: ctx.req.params.path };
+  }
+
   @HttpPost("create")
   create() {
     return new HttpResult(201, { id: 2 });
@@ -259,6 +277,37 @@ describe("HttpServer resource decorators", () => {
     assert.deepEqual(await response.json(), { id: "42" });
   });
 
+  it("requires parameters unless their route segment has a question mark suffix", async () => {
+    const requiredMissing = await fetch(`${baseUrl}/api/posts/required/value`);
+    assert.equal(requiredMissing.status, 404);
+
+    const required = await fetch(`${baseUrl}/api/posts/required/42/value`);
+    assert.equal(required.status, 200);
+    assert.deepEqual(await required.json(), { id: "42" });
+
+    const optionalMissing = await fetch(`${baseUrl}/api/posts/optional`);
+    assert.equal(optionalMissing.status, 200);
+    assert.deepEqual(await optionalMissing.json(), { hasId: false, id: null });
+
+    const optionalPresent = await fetch(`${baseUrl}/api/posts/optional/42`);
+    assert.equal(optionalPresent.status, 200);
+    assert.deepEqual(await optionalPresent.json(), { hasId: true, id: "42" });
+  });
+
+  it("captures zero or more trailing segments with a star suffix", async () => {
+    const emptyWildcard = await fetch(`${baseUrl}/api/posts/files`);
+    assert.equal(emptyWildcard.status, 200);
+    assert.deepEqual(await emptyWildcard.json(), { path: "" });
+
+    const nestedWildcard = await fetch(
+      `${baseUrl}/api/posts/files/images/2026/summer%20trip.png`,
+    );
+    assert.equal(nestedWildcard.status, 200);
+    assert.deepEqual(await nestedWildcard.json(), {
+      path: "images/2026/summer trip.png",
+    });
+  });
+
   it("prefers static routes but falls back to matching parameter routes", async () => {
     const staticResponse = await fetch(`${baseUrl}/api/posts/featured`);
     assert.equal(staticResponse.status, 200);
@@ -387,6 +436,13 @@ class ProxyUrlResource {
   }
 }
 
+class InvalidOptionalParameterResource {
+  @HttpGet(":id?/details")
+  getDetails() {
+    return {};
+  }
+}
+
 @HttpResource()
 class LifecycleApi extends LifecycleResource {}
 
@@ -425,6 +481,15 @@ describe("HttpServer lifecycle", () => {
     );
     assert.equal(readyResponse.status, 200);
     await server.close();
+  });
+});
+
+describe("HttpServer route validation", () => {
+  it("rejects optional parameters that are not the final path segment", () => {
+    assert.throws(() => new HttpServer(InvalidOptionalParameterResource), {
+      name: "TypeError",
+      message: "Optional route parameters must be the final path segment",
+    });
   });
 });
 

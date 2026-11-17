@@ -17,6 +17,18 @@ interface RadixRoute {
   parameterNames: string[];
 }
 
+type RouteSegment =
+  | { readonly type: "static"; readonly value: string }
+  | { readonly type: "parameter"; readonly name: string }
+  | { readonly type: "optional"; readonly name: string }
+  | { readonly type: "wildcard"; readonly name: string };
+
+interface PatternRoute {
+  readonly route: Route;
+  readonly order: number;
+  readonly segments: RouteSegment[];
+}
+
 export interface RadixRouteMatch {
   route: Route;
   order: number;
@@ -26,10 +38,23 @@ export interface RadixRouteMatch {
 /** A compressed segment trie for static paths with wildcard parameter edges. */
 export class RadixRouter {
   private readonly _root = createNode();
+  private readonly _patternRoutes: PatternRoute[] = [];
   private _nextOrder = 0;
 
   add(route: Route) {
     const segments = splitPath(route.path);
+    const routeSegments = parseRouteSegments(segments);
+    const order = this._nextOrder++;
+
+    if (
+      routeSegments.some(
+        (segment) => segment.type === "optional" || segment.type === "wildcard",
+      )
+    ) {
+      this._patternRoutes.push({ route, order, segments: routeSegments });
+      return;
+    }
+
     let node = this._root;
     let index = 0;
 
@@ -90,10 +115,10 @@ export class RadixRouter {
 
     node.routes.push({
       route,
-      order: this._nextOrder++,
-      parameterNames: segments
-        .filter((segment) => segment.startsWith(":"))
-        .map((segment) => segment.slice(1)),
+      order,
+      parameterNames: routeSegments
+        .filter((segment) => segment.type === "parameter")
+        .map((segment) => segment.name),
     });
   }
 
@@ -146,8 +171,107 @@ export class RadixRouter {
     };
 
     visit(this._root, 0, []);
+
+    for (const entry of this._patternRoutes) {
+      const params = matchPattern(entry.segments, requestSegments);
+      if (params !== undefined) {
+        matches.push({ route: entry.route, order: entry.order, params });
+      }
+    }
+
     return matches;
   }
+}
+
+function parseRouteSegments(segments: string[]): RouteSegment[] {
+  const names = new Set<string>();
+  const parsed = segments.map((segment, index): RouteSegment => {
+    if (!segment.startsWith(":")) return { type: "static", value: segment };
+
+    const suffix = segment.at(-1);
+    const hasSuffix = suffix === "?" || suffix === "*";
+    const name = segment.slice(1, hasSuffix ? -1 : undefined);
+    if (!name || name.includes("?") || name.includes("*")) {
+      throw new TypeError(`Invalid route parameter: ${segment}`);
+    }
+    if (names.has(name)) {
+      throw new TypeError(`Duplicate route parameter: ${name}`);
+    }
+    names.add(name);
+
+    if (suffix === "?") {
+      if (index !== segments.length - 1) {
+        throw new TypeError(
+          "Optional route parameters must be the final path segment",
+        );
+      }
+      return { type: "optional", name };
+    }
+    if (suffix === "*") {
+      if (index !== segments.length - 1) {
+        throw new TypeError(
+          "Wildcard route parameters must be the final path segment",
+        );
+      }
+      return { type: "wildcard", name };
+    }
+    return { type: "parameter", name };
+  });
+
+  return parsed;
+}
+
+function matchPattern(
+  routeSegments: RouteSegment[],
+  requestSegments: string[],
+): Record<string, string> | undefined {
+  const params: Record<string, string> = {};
+
+  const visit = (routeIndex: number, requestIndex: number): boolean => {
+    if (routeIndex === routeSegments.length) {
+      return requestIndex === requestSegments.length;
+    }
+
+    const segment = routeSegments[routeIndex]!;
+    if (segment.type === "static") {
+      return (
+        requestSegments[requestIndex] === segment.value &&
+        visit(routeIndex + 1, requestIndex + 1)
+      );
+    }
+
+    if (segment.type === "wildcard") {
+      try {
+        params[segment.name] = requestSegments
+          .slice(requestIndex)
+          .map((part) => decodeURIComponent(part))
+          .join("/");
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    if (requestIndex < requestSegments.length) {
+      try {
+        params[segment.name] = decodeURIComponent(
+          requestSegments[requestIndex]!,
+        );
+        if (visit(routeIndex + 1, requestIndex + 1)) return true;
+      } catch {
+        // Try an optional segment without consuming a request segment below.
+      }
+      delete params[segment.name];
+    }
+
+    if (segment.type === "optional" && visit(routeIndex + 1, requestIndex)) {
+      return true;
+    }
+
+    return false;
+  };
+
+  return visit(0, 0) ? params : undefined;
 }
 
 function createNode(): RadixNode {
