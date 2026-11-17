@@ -54,6 +54,7 @@ export type {
   OpenApiDocument,
   OpenApiInfo,
   OpenApiOptions,
+  OpenApiUiOptions,
   OpenApiSchema,
 } from "./openapi/types.js";
 export type { HttpParseBodyOptions } from "./HttpRequest.js";

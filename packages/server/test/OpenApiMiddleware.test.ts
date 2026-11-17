@@ -10,9 +10,9 @@ import {
   HttpResult,
   HttpServer,
   OpenApiMiddleware,
-} from "../src/index.js";
+} from "../src";
 import { createOpenApiRequestMiddleware } from "../src/decorators/OpenApiMiddleware.js";
-import type { OpenApiOptions } from "../src/openapi/types.js";
+import type { OpenApiOptions } from "../src";
 import type { Route } from "../src/routing/Route.js";
 
 const requestTrace: string[] = [];
@@ -51,6 +51,14 @@ class InterceptedDocsResource {
 @OpenApiMiddleware({ info: { title: "Default path API", version: "1" } })
 @HttpResource()
 class DefaultDocsResource {}
+
+@OpenApiMiddleware({
+  path: "/reference/openapi.json",
+  ui: { type: "scalar", path: "/reference" },
+  info: { title: "Scalar UI API", version: "1" },
+})
+@HttpResource()
+class ScalarUiResource {}
 
 async function withServer(
   resource: new () => object,
@@ -150,17 +158,60 @@ describe("OpenApiMiddleware", () => {
     });
   });
 
+  it("serves Scalar UI at its configured path linked to the OpenAPI document", async () => {
+    await withServer(ScalarUiResource, async (baseUrl) => {
+      const uiResponse = await fetch(`${baseUrl}/reference`);
+
+      assert.equal(uiResponse.status, 200);
+      assert.match(
+        uiResponse.headers.get("content-type") ?? "",
+        /^text\/html; charset=utf-8$/,
+      );
+      const html = await uiResponse.text();
+      assert.match(
+        html,
+        /https:\/\/cdn\.jsdelivr\.net\/npm\/@scalar\/api-reference/,
+      );
+      assert.match(
+        html,
+        /Scalar\.createApiReference\('#app', \{"url":"\/reference\/openapi\.json"\}\)/,
+      );
+
+      const documentResponse = await fetch(`${baseUrl}/reference/openapi.json`);
+      assert.equal(documentResponse.status, 200);
+      assert.equal(
+        ((await documentResponse.json()) as { info: { title: string } }).info
+          .title,
+        "Scalar UI API",
+      );
+    });
+  });
+
   it("validates endpoint paths when the request middleware is created", () => {
     for (const path of [
       "relative.json",
       "/openapi.json?format=json",
       "/openapi.json#docs",
+      "docs",
+      "/docs?view=scalar",
     ]) {
       assert.throws(
         () => createOpenApiRequestMiddleware([], validOptions({ path })),
         /OpenAPI endpoint path must be an absolute URL path/,
       );
     }
+
+    assert.throws(
+      () =>
+        createOpenApiRequestMiddleware(
+          [],
+          validOptions({
+            path: "/same",
+            ui: { type: "scalar", path: "/same/" },
+          }),
+        ),
+      /OpenAPI UI path must differ from the document path/,
+    );
   });
 
   it("falls through exactly once when the request path does not match", async () => {

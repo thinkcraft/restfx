@@ -29,6 +29,16 @@ pnpm dev
 The playground listens on <http://localhost:3000>. Set `PORT` to change the
 port.
 
+Open the interactive Scalar reference at <http://localhost:3000/docs>; the raw
+OpenAPI document is at <http://localhost:3000/openapi.json>. The sample API
+models a workspace with nested projects and tasks, including validated request
+bodies, query filters, and CRUD-style operations. Its seeded workspace ID is
+`550e8400-e29b-41d4-a716-446655440000`; for example:
+
+```sh
+curl "http://localhost:3000/workspaces/550e8400-e29b-41d4-a716-446655440000/projects?status=active&limit=10"
+```
+
 ## Common commands
 
 ```sh

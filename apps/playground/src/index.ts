@@ -1,16 +1,8 @@
 import { defineConfig } from "@framework/core";
-import { HttpGet, HttpResource, HttpServer } from "@framework/server";
+import { HttpServer } from "@framework/server";
+import { PlaygroundApi } from "./api.js";
 
 const config = defineConfig({ port: Number(process.env.PORT) || 3000 });
-
-@HttpResource()
-class API {
-  @HttpGet()
-  hello() {
-    return "Hello from your full-stack framework!";
-  }
-}
-
-const server = new HttpServer(API);
+const server = new HttpServer(PlaygroundApi);
 
 server.listen(config.port);

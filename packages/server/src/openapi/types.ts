@@ -48,6 +48,8 @@ export interface OpenApiInfo {
 export interface OpenApiOptions {
   /** Endpoint path served by OpenApiMiddleware; defaults to `/openapi.json`. */
   readonly path?: string;
+  /** Optional API reference UI served by OpenApiMiddleware. */
+  readonly ui?: OpenApiUiOptions;
   readonly info: OpenApiInfo;
   readonly servers?: readonly Readonly<Record<string, unknown>>[];
   readonly tags?: readonly Readonly<Record<string, unknown>>[];
@@ -55,6 +57,13 @@ export interface OpenApiOptions {
   readonly securitySchemes?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
+}
+
+export interface OpenApiUiOptions {
+  /** UI implementation to serve. */
+  readonly type: "scalar";
+  /** UI page path; defaults to `/docs`. */
+  readonly path?: string;
 }
 
 export interface OpenApiDocument extends Readonly<Record<string, unknown>> {

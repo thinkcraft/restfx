@@ -329,6 +329,22 @@ class ApiResource {}
 const server = new HttpServer(ApiResource);
 ```
 
+To serve an interactive Scalar API reference as well, enable the UI option. It
+defaults to `/docs`, and loads the document from the configured OpenAPI endpoint:
+
+```ts
+@OpenApiMiddleware({
+  path: "/docs/openapi.json",
+  ui: { type: "scalar", path: "/docs" },
+  info: { title: "Example API", version: "1.0.0" },
+})
+@HttpResource()
+class ApiResource {}
+```
+
+The UI page uses Scalar's CDN bundle; the JSON document endpoint remains
+available independently. Omit `ui` to serve only the document.
+
 Routes contribute their HTTP methods and paths, inferred required path
 parameters, request and response model schemas, and standard request-validation
 responses. Optional final path segments are represented by both path variants.

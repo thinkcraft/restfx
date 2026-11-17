@@ -4,5 +4,6 @@ export enum HttpMediaType {
   ApplicationOctetStream = "application/octet-stream",
   ApplicationUrlEncoded = "application/x-www-form-urlencoded",
   MultipartFormData = "multipart/form-data",
+  TextHtml = "text/html",
   TextPlain = "text/plain",
 }
