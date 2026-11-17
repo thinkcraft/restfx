@@ -131,6 +131,13 @@ more `{ path, message }` issues. Pass the model data type to `@Model<T>()` for
 typed cross-field checks. The optional `schema` model option adds extra JSON
 Schema/OpenAPI keywords such as `dependentRequired` or `if`/`then`.
 
+Models can be composed as nested fields with `@Field({ model: OtherModel })`;
+validation is recursive and OpenAPI uses a shared schema reference. They can
+also be extended with normal class inheritance: decorate the base and derived
+classes with `@Model()`, and the derived model inherits the base fields and
+model options while adding or overriding fields. This keeps shared constraints
+in one place instead of duplicating them across related models.
+
 ## Common commands
 
 ```sh

@@ -81,12 +81,25 @@ class DogEvent {
   friendly!: boolean;
 }
 
+@Model()
+class BaseEventOwner {
+  @Field({ type: StringField })
+  name!: string;
+}
+
+@Model()
+class EventOwner extends BaseEventOwner {
+  @Field({ type: StringField })
+  role!: string;
+}
+
 type EventData = {
   date: string;
   time: string;
   timestamp: string;
   value: number | string;
   pet: CatEvent | DogEvent;
+  owner: EventOwner;
   start: number;
   end: number;
 };
@@ -113,6 +126,9 @@ class EventModel {
 
   @Field({ type: DiscriminatedUnion("kind", { cat: CatEvent, dog: DogEvent }) })
   pet!: CatEvent | DogEvent;
+
+  @Field({ model: EventOwner })
+  owner!: EventOwner;
 
   @Field({ type: NumberField })
   start!: number;
@@ -185,6 +201,17 @@ describe("HTTP request models", () => {
           },
         },
       });
+      assert.deepEqual(eventSchema.properties.owner, {
+        $ref: "#/components/schemas/EventOwner",
+      });
+      assert.deepEqual(document.components.schemas.EventOwner.properties, {
+        name: { type: "string" },
+        role: { type: "string" },
+      });
+      assert.deepEqual(document.components.schemas.EventOwner.required, [
+        "name",
+        "role",
+      ]);
       assert.deepEqual(eventSchema.dependentRequired, { start: ["end"] });
 
       const valid = await fetch(`${baseUrl}/users/event`, {
@@ -196,6 +223,7 @@ describe("HTTP request models", () => {
           timestamp: "2024-02-29T12:30:00Z",
           value: 42,
           pet: { kind: "cat", name: "Mochi", extra: true },
+          owner: { name: "Ada", role: "organizer" },
           start: 1,
           end: 2,
         }),
@@ -203,6 +231,7 @@ describe("HTTP request models", () => {
       assert.equal(valid.status, 200);
       const body = await valid.json();
       assert.deepEqual(body.pet, { kind: "cat", name: "Mochi" });
+      assert.deepEqual(body.owner, { name: "Ada", role: "organizer" });
 
       const invalid = await fetch(`${baseUrl}/users/event`, {
         method: "POST",
@@ -213,6 +242,7 @@ describe("HTTP request models", () => {
           timestamp: "2024-02-29T12:30:00Z",
           value: 42,
           pet: { kind: "dog", friendly: true },
+          owner: { name: "Ada", role: "organizer" },
           start: 3,
           end: 2,
         }),
@@ -233,6 +263,7 @@ describe("HTTP request models", () => {
           timestamp: "2024-02-29T12:30:00Z",
           value: 42,
           pet: { kind: "dog", friendly: true },
+          owner: { name: "Ada", role: "organizer" },
           start: 3,
           end: 2,
         }),

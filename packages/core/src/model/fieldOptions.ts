@@ -34,6 +34,15 @@ export function validateFieldOptions(options: FieldOptions) {
     if (typeof options.model !== "function") {
       throw new TypeError('@Field with source "body" requires a model');
     }
+  } else if (options.model !== undefined) {
+    if (typeof options.model !== "function") {
+      throw new TypeError("@Field model must be a model constructor");
+    }
+    if (options.type !== undefined || options.source !== undefined) {
+      throw new TypeError(
+        "Nested model fields cannot declare a type or source",
+      );
+    }
   } else if (
     typeof options.type !== "function" ||
     typeof options.type.prototype?.validate !== "function"

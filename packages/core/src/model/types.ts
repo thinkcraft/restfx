@@ -53,6 +53,12 @@ export type FieldOptions<T = unknown> = FieldOptionsBase<T> &
     | {
         readonly type?: never;
         readonly model: ModelConstructor<T>;
+        readonly source?: never;
+        readonly sourceName?: never;
+      }
+    | {
+        readonly type?: never;
+        readonly model: ModelConstructor<T>;
         readonly source: "body";
         readonly sourceName?: never;
       }

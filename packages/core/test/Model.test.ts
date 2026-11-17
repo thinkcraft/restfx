@@ -95,16 +95,37 @@ class PresenceModel {
   nullDefault!: string | null;
 }
 
-@Model({ unknownFields: "strip" })
+@Model({ unknownFields: "reject" })
 class BaseModel {
   @Field({ type: StringField })
   inherited!: string;
 }
 
-@Model()
+@Model({ unknownFields: "strip" })
 class DerivedModel extends BaseModel {
   @Field({ type: NumberField })
   own!: number;
+}
+
+@Model()
+class StrictDerivedModel extends BaseModel {
+  @Field({ type: NumberField })
+  own!: number;
+}
+
+@Model()
+class AddressModel {
+  @Field({ type: StringField })
+  city!: string;
+}
+
+@Model()
+class ComposedProfileModel {
+  @Field({ type: StringField })
+  name!: string;
+
+  @Field({ model: AddressModel })
+  address!: AddressModel;
 }
 
 @Model()
@@ -653,6 +674,41 @@ describe("shared model decorators", () => {
       validateModel({ inherited: "base", own: 1, ignored: true }, DerivedModel),
       { inherited: "base", own: 1 },
     );
+
+    const strictError = captureModelError(() =>
+      validateModel(
+        { inherited: "base", own: 1, extra: true },
+        StrictDerivedModel,
+      ),
+    );
+    assert.deepEqual(strictError.issues, [
+      { path: "extra", message: "Unknown field" },
+    ]);
+  });
+
+  it("composes models as reusable nested fields", () => {
+    const profile = validateModel(
+      {
+        name: "Ada",
+        address: { city: "London", ignored: true },
+        ignored: true,
+      },
+      ComposedProfileModel,
+    );
+    assertModelData(
+      { ...profile, address: { ...profile.address } },
+      { name: "Ada", address: { city: "London" } },
+    );
+
+    const error = captureModelError(() =>
+      validateModel(
+        { name: "Ada", address: { city: 42 } },
+        ComposedProfileModel,
+      ),
+    );
+    assert.deepEqual(error.issues, [
+      { path: "address.city", message: "Expected a string" },
+    ]);
   });
 
   it("rejects non-object input and models without @Model", () => {
