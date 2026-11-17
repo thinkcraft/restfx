@@ -5,7 +5,21 @@ import type {
   ValidationIssue,
 } from "./types.js";
 
-export function validateModelOptions(options: ModelOptions) {
+export function validateModelOptions(options: ModelOptions<any>) {
+  if (
+    options.validate !== undefined &&
+    typeof options.validate !== "function"
+  ) {
+    throw new TypeError("validate must be a function");
+  }
+  if (
+    options.schema !== undefined &&
+    (options.schema === null ||
+      typeof options.schema !== "object" ||
+      Array.isArray(options.schema))
+  ) {
+    throw new TypeError("schema must be an object");
+  }
   if (
     options.unknownFields !== undefined &&
     options.unknownFields !== "reject" &&

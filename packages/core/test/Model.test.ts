@@ -3,6 +3,9 @@ import { describe, it } from "node:test";
 import {
   ArrayOf,
   BooleanField,
+  DateField,
+  DateTimeField,
+  DiscriminatedUnion,
   Email,
   Enum,
   Field,
@@ -12,6 +15,8 @@ import {
   ModelValidationError,
   NumberField,
   StringField,
+  TimeField,
+  UnionOf,
   UUID,
   validateModel,
 } from "../src";
@@ -138,6 +143,71 @@ class SourcedRequestModel {
   body!: RequestBodyModel;
 }
 
+@Model()
+class TemporalModel {
+  @Field({ type: DateField })
+  date!: string;
+
+  @Field({ type: TimeField })
+  time!: string;
+
+  @Field({ type: DateTimeField })
+  timestamp!: string;
+}
+
+@Model()
+class CatModel {
+  @Field({ type: Enum(["cat"]) })
+  kind!: "cat";
+
+  @Field({ type: StringField })
+  meows!: string;
+}
+
+@Model()
+class DogModel {
+  @Field({ type: Enum(["dog"]) })
+  kind!: "dog";
+
+  @Field({ type: BooleanField })
+  goodBoy!: boolean;
+}
+
+@Model()
+class PetModel {
+  @Field({ type: DiscriminatedUnion("kind", { cat: CatModel, dog: DogModel }) })
+  pet!: CatModel | DogModel;
+
+  @Field({
+    type: ArrayOf(DiscriminatedUnion("kind", { cat: CatModel, dog: DogModel })),
+    optional: true,
+  })
+  pets?: (CatModel | DogModel)[];
+}
+
+@Model()
+class FlexibleValueModel {
+  @Field({ type: UnionOf(StringField, NumberField) })
+  value!: string | number;
+}
+
+type RangeData = { start: number; end: number };
+
+@Model<RangeData>({
+  schema: { dependentRequired: { start: ["end"] } },
+  validate: (value) =>
+    value.start <= value.end
+      ? undefined
+      : { path: "end", message: "Must not be before start" },
+})
+class RangeModel {
+  @Field({ type: NumberField })
+  start!: number;
+
+  @Field({ type: NumberField })
+  end!: number;
+}
+
 class UndecoratedModel {}
 
 function captureModelError(action: () => unknown) {
@@ -155,6 +225,101 @@ function assertModelData(actual: object, expected: object) {
 }
 
 describe("shared model decorators", () => {
+  it("validates ISO date, time, and date-time formats", () => {
+    assertModelData(
+      validateModel(
+        {
+          date: "2024-02-29",
+          time: "12:30:45.123Z",
+          timestamp: "2024-02-29T12:30:45+01:00",
+        },
+        TemporalModel,
+      ),
+      {
+        date: "2024-02-29",
+        time: "12:30:45.123Z",
+        timestamp: "2024-02-29T12:30:45+01:00",
+      },
+    );
+    const invalidDate = captureModelError(() =>
+      validateModel(
+        {
+          date: "2023-02-29",
+          time: "12:30:45",
+          timestamp: "2024-01-01T00:00:00Z",
+        },
+        TemporalModel,
+      ),
+    );
+    assert.equal(invalidDate.issues[0]?.path, "date");
+    const invalidTime = captureModelError(() =>
+      validateModel(
+        {
+          date: "2024-01-01",
+          time: "25:00:00",
+          timestamp: "2024-01-01T00:00:00Z",
+        },
+        TemporalModel,
+      ),
+    );
+    assert.equal(invalidTime.issues[0]?.path, "time");
+  });
+
+  it("validates unions and returns normalized discriminated model instances", () => {
+    assertModelData(validateModel({ value: "text" }, FlexibleValueModel), {
+      value: "text",
+    });
+    assertModelData(validateModel({ value: 42 }, FlexibleValueModel), {
+      value: 42,
+    });
+    assert.equal(
+      captureModelError(() =>
+        validateModel({ value: false }, FlexibleValueModel),
+      ).issues[0]?.path,
+      "value",
+    );
+
+    const cat = validateModel(
+      { pet: { kind: "cat", meows: "often", ignored: true } },
+      PetModel,
+    );
+    assert.ok(cat.pet instanceof CatModel);
+    assertModelData(cat.pet, { kind: "cat", meows: "often" });
+    const pets = validateModel(
+      {
+        pet: { kind: "cat", meows: "often" },
+        pets: [
+          { kind: "dog", goodBoy: true },
+          { kind: "cat", meows: "always" },
+        ],
+      },
+      PetModel,
+    );
+    assert.ok(pets.pets?.[0] instanceof DogModel);
+    assert.ok(pets.pets?.[1] instanceof CatModel);
+    assert.ok(
+      captureModelError(() =>
+        validateModel({ pet: { kind: "dog", goodBoy: "yes" } }, PetModel),
+      ).issues[0]?.message.includes("Expected a boolean"),
+    );
+  });
+
+  it("runs cross-field validation on validated values and supports model schemas", () => {
+    assertModelData(validateModel({ start: 1, end: 2 }, RangeModel), {
+      start: 1,
+      end: 2,
+    });
+    const error = captureModelError(() =>
+      validateModel({ start: 4, end: 2 }, RangeModel),
+    );
+    assert.deepEqual(error.issues, [
+      { path: "end", message: "Must not be before start" },
+    ]);
+    assert.deepEqual(getModelMetadata(RangeModel)?.options.schema, {
+      dependentRequired: { start: ["end"] },
+    });
+  });
+
   it("validates canonical UUID field values", () => {
     assertModelData(
       validateModel({ id: "550e8400-e29b-41d4-a716-446655440000" }, UUIDModel),

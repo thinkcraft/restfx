@@ -74,6 +74,43 @@ const openApiDocument = {
 };
 
 describe("API client generator", () => {
+  it("preserves OpenAPI union branches as generated TypeScript types", () => {
+    const document: Record<string, any> = structuredClone(openApiDocument);
+    document.paths["/records/{id}"].post.responses["201"].content[
+      "application/json"
+    ].schema = {
+      oneOf: [
+        { $ref: "#/components/schemas/CatEvent" },
+        { $ref: "#/components/schemas/DogEvent" },
+      ],
+      discriminator: {
+        propertyName: "kind",
+        mapping: {
+          cat: "#/components/schemas/CatEvent",
+          dog: "#/components/schemas/DogEvent",
+        },
+      },
+    };
+    document.components.schemas.CatEvent = {
+      "x-framework-model": "CatEvent",
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["cat"] },
+        date: { type: "string", format: "date" },
+      },
+    };
+    document.components.schemas.DogEvent = {
+      "x-framework-model": "DogEvent",
+      type: "object",
+      properties: { kind: { type: "string", enum: ["dog"] } },
+    };
+
+    const generated = generateClient(document, { models: "./models.js" });
+    assert.match(generated, /import \{[^}]*CatEvent/s);
+    assert.match(generated, /import \{[^}]*DogEvent/s);
+    assert.match(generated, /as CatEvent \| DogEvent/);
+  });
+
   it("generates model imports and validates requests before fetch", async () => {
     const generatedPath = new URL(
       "./.generated-client.test.ts",

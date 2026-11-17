@@ -9,5 +9,6 @@ export type {
   ModelFieldSource,
   ModelMetadata,
   ModelOptions,
+  ModelValidator,
   ValidationIssue,
 } from "./types.js";

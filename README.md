@@ -53,6 +53,78 @@ class Project {
 }
 ```
 
+Shared models also support ISO/RFC 3339 `DateField`, `TimeField`, and
+`DateTimeField` values (kept as strings), `UnionOf(...)` for alternative field
+types, and `DiscriminatedUnion(...)` for unions of decorated models. OpenAPI
+preserves these as `date`, `time`, and `date-time` formats, `anyOf`, and
+`oneOf` schemas with discriminator mappings; generated client types retain the
+union alternatives.
+
+```ts
+import {
+  DateField,
+  DiscriminatedUnion,
+  Enum,
+  Field,
+  Model,
+  NumberField,
+  StringField,
+  UnionOf,
+} from "@framework/core";
+
+@Model()
+class Cat {
+  @Field({ type: Enum(["cat"]) })
+  kind!: "cat";
+
+  @Field({ type: StringField })
+  name!: string;
+}
+
+@Model()
+class Dog {
+  @Field({ type: Enum(["dog"]) })
+  kind!: "dog";
+
+  @Field({ type: StringField })
+  name!: string;
+}
+
+@Model()
+class Event {
+  @Field({ type: DateField })
+  date!: string;
+
+  @Field({ type: UnionOf(StringField, NumberField) })
+  value!: string | number;
+
+  @Field({ type: DiscriminatedUnion("kind", { cat: Cat, dog: Dog }) })
+  pet!: Cat | Dog;
+}
+
+type TimeWindow = { start: number; end: number };
+
+@Model<TimeWindow>({
+  schema: { dependentRequired: { start: ["end"] } },
+  validate: (window) =>
+    window.start <= window.end
+      ? undefined
+      : { path: "end", message: "Must not be before start" },
+})
+class WindowModel {
+  @Field({ type: NumberField })
+  start!: number;
+
+  @Field({ type: NumberField })
+  end!: number;
+}
+```
+
+Model-level `validate` runs after declared fields validate and returns one or
+more `{ path, message }` issues. Pass the model data type to `@Model<T>()` for
+typed cross-field checks. The optional `schema` model option adds extra JSON
+Schema/OpenAPI keywords such as `dependentRequired` or `if`/`then`.
+
 ## Common commands
 
 ```sh

@@ -14,6 +14,14 @@ export function ArrayOf<T>(
       }
       return undefined;
     }
+
+    parse(value: unknown) {
+      if (!Array.isArray(value)) throw new TypeError("Expected an array");
+      const validator = new itemType();
+      return value.map((item) =>
+        validator.parse ? validator.parse(item) : item,
+      );
+    }
   }
 
   Object.defineProperty(ArrayField, "itemType", { value: itemType });

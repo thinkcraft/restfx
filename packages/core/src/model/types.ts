@@ -5,6 +5,10 @@ export interface ValidationIssue {
   readonly message: string;
 }
 
+export type ModelValidator<T = Readonly<Record<string, unknown>>> = (
+  value: Readonly<T>,
+) => void | ValidationIssue | readonly ValidationIssue[];
+
 export type ModelConstructor<T = unknown> = new (...args: any[]) => T;
 
 export type ModelFieldSource = "path" | "query" | "header" | "body";
@@ -54,9 +58,13 @@ export type FieldOptions<T = unknown> = FieldOptionsBase<T> &
       }
   );
 
-export interface ModelOptions {
+export interface ModelOptions<T = Readonly<Record<string, unknown>>> {
   /** Unknown properties are stripped by default; "reject" opts into rejection. */
   readonly unknownFields?: "reject" | "strip";
+  /** Cross-field validation, run after all declared fields validate. */
+  readonly validate?: ModelValidator<T>;
+  /** Additional JSON Schema/OpenAPI keywords for the model object. */
+  readonly schema?: Readonly<Record<string, unknown>>;
 }
 
 export interface ModelFieldMetadata extends FieldOptionsBase<unknown> {
@@ -69,5 +77,6 @@ export interface ModelFieldMetadata extends FieldOptionsBase<unknown> {
 
 export interface ModelMetadata {
   readonly fields: ReadonlyMap<string, ModelFieldMetadata>;
-  readonly options: Readonly<ModelOptions>;
+  readonly options: Readonly<ModelOptions<any>>;
+  readonly validators: readonly ModelValidator<any>[];
 }

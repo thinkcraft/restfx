@@ -2,7 +2,7 @@ import { validateFieldOptions, validateModelOptions } from "./fieldOptions.js";
 import { registerField, registerModel } from "./metadata.js";
 import type { FieldOptions, ModelOptions } from "./types.js";
 
-export function Model(options: ModelOptions = {}) {
+export function Model<T = any>(options: ModelOptions<T> = {}) {
   validateModelOptions(options);
 
   return (value: Function, context: ClassDecoratorContext) => {

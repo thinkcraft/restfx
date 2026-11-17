@@ -1,10 +1,16 @@
 export { ArrayOf } from "./ArrayOf.js";
 export { BooleanField } from "./BooleanField.js";
+export { DateField } from "./DateField.js";
+export { DateTimeField } from "./DateTimeField.js";
+export { DiscriminatedUnion } from "./DiscriminatedUnion.js";
 export { Email } from "./Email.js";
 export { Enum } from "./Enum.js";
 export type { EnumValue } from "./Enum.js";
 export { IntegerField } from "./IntegerField.js";
 export { NumberField } from "./NumberField.js";
 export { StringField } from "./StringField.js";
+export { TimeField } from "./TimeField.js";
+export { UnionOf } from "./UnionOf.js";
+export type { FieldValue } from "./UnionOf.js";
 export { UUID } from "./UUID.js";
 export type { FieldType, FieldTypeConstructor } from "./FieldType.js";

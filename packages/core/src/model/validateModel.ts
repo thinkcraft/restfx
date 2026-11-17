@@ -54,7 +54,12 @@ export function validateModel<T>(
   for (const [name, field] of metadata.fields) {
     if (!Object.hasOwn(input, name)) {
       if (field.default !== undefined) {
-        assign(name, cloneDefault(field.default));
+        const defaultValue = cloneDefault(field.default);
+        const fieldType = field.type ? new field.type() : undefined;
+        assign(
+          name,
+          fieldType?.parse ? fieldType.parse(defaultValue) : defaultValue,
+        );
       } else if (!field.optional) {
         issues.push({ path: name, message: "Field is required" });
       }
@@ -86,14 +91,24 @@ export function validateModel<T>(
     if (!field.type) {
       throw new TypeError(`Field ${name} is missing a field type`);
     }
-    const typeError = new field.type().validate(fieldValue);
+    const fieldType = new field.type();
+    const typeError = fieldType.validate(fieldValue);
     if (typeError !== undefined) {
       issues.push({ path: name, message: typeError });
       continue;
     }
 
     validateConstraints(fieldValue, field, name, issues);
-    assign(name, fieldValue);
+    assign(name, fieldType.parse ? fieldType.parse(fieldValue) : fieldValue);
+  }
+
+  if (issues.length === 0) {
+    for (const validate of metadata.validators) {
+      const result = validate(output);
+      if (result === undefined) continue;
+      if (Array.isArray(result)) issues.push(...result);
+      else issues.push(result as ValidationIssue);
+    }
   }
 
   if (issues.length > 0) throw new ModelValidationError(issues);

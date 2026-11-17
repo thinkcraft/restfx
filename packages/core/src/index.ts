@@ -22,20 +22,27 @@ export type {
   ModelFieldSource,
   ModelMetadata,
   ModelOptions,
+  ModelValidator,
   ValidationIssue,
 } from "./model/index.js";
 export {
   ArrayOf,
   BooleanField,
+  DateField,
+  DateTimeField,
+  DiscriminatedUnion,
   Email,
   Enum,
   IntegerField,
   NumberField,
   StringField,
+  TimeField,
+  UnionOf,
   UUID,
 } from "./fields/index.js";
 export type {
   EnumValue,
+  FieldValue,
   FieldType,
   FieldTypeConstructor,
 } from "./fields/index.js";

@@ -23,7 +23,7 @@ if (symbolWithMetadata.metadata === undefined) {
 export function registerModel(
   model: Function,
   context: ClassDecoratorContext,
-  options: ModelOptions,
+  options: ModelOptions<any>,
 ) {
   const contextMetadata = context.metadata as Record<PropertyKey, unknown>;
   const ownFields =
@@ -35,9 +35,20 @@ export function registerModel(
   const fields = new Map(inherited?.fields);
   for (const [name, field] of ownFields) fields.set(name, field);
 
+  const mergedOptions = { ...inherited?.options, ...options };
+  if (inherited?.options.schema || options.schema) {
+    mergedOptions.schema = {
+      ...inherited?.options.schema,
+      ...options.schema,
+    };
+  }
   models.set(model, {
     fields,
-    options: { ...inherited?.options, ...options },
+    options: mergedOptions,
+    validators: [
+      ...(inherited?.validators ?? []),
+      ...(options.validate ? [options.validate] : []),
+    ],
   });
 }
 

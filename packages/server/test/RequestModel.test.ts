@@ -13,10 +13,16 @@ import {
 import {
   ArrayOf,
   BooleanField,
+  DateField,
+  DateTimeField,
+  DiscriminatedUnion,
   Enum,
   Field,
   Model,
+  NumberField,
   StringField,
+  TimeField,
+  UnionOf,
   UUID,
 } from "@framework/core";
 
@@ -57,6 +63,64 @@ class CreateRequest {
   body!: CreateRequestBody;
 }
 
+@Model()
+class CatEvent {
+  @Field({ type: Enum(["cat"]) })
+  kind!: "cat";
+
+  @Field({ type: StringField })
+  name!: string;
+}
+
+@Model()
+class DogEvent {
+  @Field({ type: Enum(["dog"]) })
+  kind!: "dog";
+
+  @Field({ type: BooleanField })
+  friendly!: boolean;
+}
+
+type EventData = {
+  date: string;
+  time: string;
+  timestamp: string;
+  value: number | string;
+  pet: CatEvent | DogEvent;
+  start: number;
+  end: number;
+};
+
+@Model<EventData>({
+  schema: { dependentRequired: { start: ["end"] } },
+  validate: (event) =>
+    event.start <= event.end
+      ? undefined
+      : { path: "end", message: "Must not be before start" },
+})
+class EventModel {
+  @Field({ type: DateField })
+  date!: string;
+
+  @Field({ type: TimeField })
+  time!: string;
+
+  @Field({ type: DateTimeField })
+  timestamp!: string;
+
+  @Field({ type: UnionOf(StringField, NumberField) })
+  value!: number | string;
+
+  @Field({ type: DiscriminatedUnion("kind", { cat: CatEvent, dog: DogEvent }) })
+  pet!: CatEvent | DogEvent;
+
+  @Field({ type: NumberField })
+  start!: number;
+
+  @Field({ type: NumberField })
+  end!: number;
+}
+
 let sameModelInstance = false;
 
 @OpenApiMiddleware({
@@ -77,6 +141,11 @@ class UsersResource {
     sameModelInstance = first === second;
     return first;
   }
+
+  @HttpPost({ path: "event", body: EventModel })
+  async createEvent(context: HttpContext) {
+    return await context.req.parseBody<EventModel>({ model: EventModel });
+  }
 }
 
 async function withServer(run: (baseUrl: string) => Promise<void>) {
@@ -92,6 +161,91 @@ async function withServer(run: (baseUrl: string) => Promise<void>) {
 }
 
 describe("HTTP request models", () => {
+  it("describes formats and union models in OpenAPI and validates them at runtime", async () => {
+    await withServer(async (baseUrl) => {
+      const documentResponse = await fetch(`${baseUrl}/openapi.json`);
+      const document = (await documentResponse.json()) as any;
+      const eventSchema = document.components.schemas.EventModel;
+      assert.equal(eventSchema.properties.date.format, "date");
+      assert.equal(eventSchema.properties.time.format, "time");
+      assert.equal(eventSchema.properties.timestamp.format, "date-time");
+      assert.deepEqual(eventSchema.properties.value, {
+        anyOf: [{ type: "string" }, { type: "number" }],
+      });
+      assert.deepEqual(eventSchema.properties.pet, {
+        oneOf: [
+          { $ref: "#/components/schemas/CatEvent" },
+          { $ref: "#/components/schemas/DogEvent" },
+        ],
+        discriminator: {
+          propertyName: "kind",
+          mapping: {
+            cat: "#/components/schemas/CatEvent",
+            dog: "#/components/schemas/DogEvent",
+          },
+        },
+      });
+      assert.deepEqual(eventSchema.dependentRequired, { start: ["end"] });
+
+      const valid = await fetch(`${baseUrl}/users/event`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          date: "2024-02-29",
+          time: "12:30:00Z",
+          timestamp: "2024-02-29T12:30:00Z",
+          value: 42,
+          pet: { kind: "cat", name: "Mochi", extra: true },
+          start: 1,
+          end: 2,
+        }),
+      });
+      assert.equal(valid.status, 200);
+      const body = await valid.json();
+      assert.deepEqual(body.pet, { kind: "cat", name: "Mochi" });
+
+      const invalid = await fetch(`${baseUrl}/users/event`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          date: "2024-02-30",
+          time: "12:30:00Z",
+          timestamp: "2024-02-29T12:30:00Z",
+          value: 42,
+          pet: { kind: "dog", friendly: true },
+          start: 3,
+          end: 2,
+        }),
+      });
+      assert.equal(invalid.status, 422);
+      const failure = await invalid.json();
+      assert.deepEqual(
+        failure.details.map((issue: { path: string }) => issue.path),
+        ["date"],
+      );
+
+      const invalidRange = await fetch(`${baseUrl}/users/event`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          date: "2024-02-29",
+          time: "12:30:00Z",
+          timestamp: "2024-02-29T12:30:00Z",
+          value: 42,
+          pet: { kind: "dog", friendly: true },
+          start: 3,
+          end: 2,
+        }),
+      });
+      assert.equal(invalidRange.status, 422);
+      const rangeFailure = await invalidRange.json();
+      assert.deepEqual(
+        rangeFailure.details.map((issue: { path: string }) => issue.path),
+        ["end"],
+      );
+    });
+  });
+
   it("combines path, query, header, and nested body values into a validated model", async () => {
     sameModelInstance = false;
     await withServer(async (baseUrl) => {

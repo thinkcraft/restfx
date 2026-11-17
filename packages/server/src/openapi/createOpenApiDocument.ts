@@ -1,10 +1,13 @@
 import {
   BooleanField,
+  DateField,
+  DateTimeField,
   Email,
   getModelMetadata,
   IntegerField,
   NumberField,
   StringField,
+  TimeField,
   UUID,
 } from "@framework/core";
 import type { ModelConstructor, ModelFieldMetadata } from "@framework/core";
@@ -433,17 +436,33 @@ function createResponse(
 }
 
 function createModelNames(routes: readonly Route[]) {
-  const models = new Set<ModelConstructor>();
-  for (const route of routes) {
-    if (route.bodyModel) models.add(route.bodyModel);
-    if (route.requestModel) {
-      models.add(route.requestModel);
-      const body = getRequestModelMetadata(route.requestModel).body;
-      if (body?.model) models.add(body.model);
+  const models: ModelConstructor[] = [];
+  const queued = new Set<ModelConstructor>();
+  const addModel = (model: ModelConstructor) => {
+    if (!queued.has(model)) {
+      queued.add(model);
+      models.push(model);
     }
-    if (route.responseModel) models.add(route.responseModel);
+  };
+  for (const route of routes) {
+    if (route.bodyModel) addModel(route.bodyModel);
+    if (route.requestModel) {
+      addModel(route.requestModel);
+      const body = getRequestModelMetadata(route.requestModel).body;
+      if (body?.model) addModel(body.model);
+    }
+    if (route.responseModel) addModel(route.responseModel);
     for (const response of Object.values(route.responses ?? {})) {
-      if (response.model) models.add(response.model);
+      if (response.model) addModel(response.model);
+    }
+  }
+
+  for (let index = 0; index < models.length; index++) {
+    const metadata = getModelMetadata(models[index]!);
+    if (!metadata) continue;
+    for (const field of metadata.fields.values()) {
+      if (field.model) addModel(field.model);
+      for (const model of getModelsFromFieldType(field.type)) addModel(model);
     }
   }
 
@@ -469,6 +488,27 @@ function createModelNames(routes: readonly Route[]) {
   return names;
 }
 
+function getModelsFromFieldType(type: Function | undefined) {
+  const models = new Set<ModelConstructor>();
+  const visited = new Set<Function>();
+  const visit = (fieldType: Function | undefined) => {
+    if (!fieldType || visited.has(fieldType)) return;
+    visited.add(fieldType);
+    const metadata = fieldType as Function & {
+      readonly itemType?: Function;
+      readonly unionTypes?: readonly Function[];
+      readonly modelMapping?: Readonly<Record<string, ModelConstructor>>;
+    };
+    for (const model of Object.values(metadata.modelMapping ?? {})) {
+      models.add(model);
+    }
+    for (const unionType of metadata.unionTypes ?? []) visit(unionType);
+    visit(metadata.itemType);
+  };
+  visit(type);
+  return models;
+}
+
 function createModelSchema(
   model: ModelConstructor,
   modelNames: Map<ModelConstructor, string>,
@@ -487,6 +527,7 @@ function createModelSchema(
   }
 
   return {
+    ...metadata.options.schema,
     "x-framework-model": model.name,
     type: "object",
     ...(required.length > 0 ? { required } : {}),
@@ -504,7 +545,7 @@ function createFieldSchema(
     : field.model
       ? { $ref: `#/components/schemas/${modelNames.get(field.model)!}` }
       : field.type
-        ? getFieldTypeSchema(field.type)
+        ? getFieldTypeSchema(field.type, modelNames)
         : {};
 
   if (field.minLength !== undefined) base.minLength = field.minLength;
@@ -529,7 +570,39 @@ function createFieldSchema(
 
 function getFieldTypeSchema(
   type: NonNullable<ModelFieldMetadata["type"]>,
+  modelNames: Map<ModelConstructor, string>,
 ): Record<string, unknown> {
+  const modelMapping = (
+    type as typeof type & {
+      readonly discriminator?: string;
+      readonly modelMapping?: Readonly<Record<string, ModelConstructor>>;
+    }
+  ).modelMapping;
+  if (modelMapping) {
+    const discriminator = (
+      type as typeof type & { readonly discriminator: string }
+    ).discriminator;
+    const mapping = Object.fromEntries(
+      Object.entries(modelMapping).map(([tag, model]) => [
+        tag,
+        `#/components/schemas/${modelNames.get(model)!}`,
+      ]),
+    );
+    return {
+      oneOf: Object.values(mapping).map(($ref) => ({ $ref })),
+      discriminator: { propertyName: discriminator, mapping },
+    };
+  }
+
+  const unionTypes = (
+    type as typeof type & { readonly unionTypes?: readonly (typeof type)[] }
+  ).unionTypes;
+  if (unionTypes) {
+    return {
+      anyOf: unionTypes.map((part) => getFieldTypeSchema(part, modelNames)),
+    };
+  }
+
   const enumValues = (
     type as typeof type & { readonly enumValues?: readonly unknown[] }
   ).enumValues;
@@ -546,9 +619,18 @@ function getFieldTypeSchema(
   if (
     type === StringField ||
     type === Email ||
+    type === DateField ||
+    type === DateTimeField ||
+    type === TimeField ||
     type.prototype instanceof StringField
   ) {
     const schema: Record<string, unknown> = { type: "string" };
+    if (type === DateField || type.prototype instanceof DateField)
+      schema.format = "date";
+    if (type === DateTimeField || type.prototype instanceof DateTimeField)
+      schema.format = "date-time";
+    if (type === TimeField || type.prototype instanceof TimeField)
+      schema.format = "time";
     if (type === Email || type.prototype instanceof Email)
       schema.format = "email";
     if (type === UUID || type.prototype instanceof UUID) schema.format = "uuid";
@@ -563,7 +645,9 @@ function getFieldTypeSchema(
       readonly itemType?: typeof type;
     }
   ).itemType;
-  return itemType ? { type: "array", items: getFieldTypeSchema(itemType) } : {};
+  return itemType
+    ? { type: "array", items: getFieldTypeSchema(itemType, modelNames) }
+    : {};
 }
 
 function primitiveEnumType(value: unknown) {
