@@ -190,7 +190,7 @@ describe("API client generator", () => {
           id: "550e8400-e29b-41d4-a716-446655440000",
           payload: { name: "valid" },
         }),
-        (error: unknown) => {
+        (error: any) => {
           assert.ok(error instanceof generatedClient.ApiError);
           assert.equal(error.status, 400);
           assert.deepEqual(error.body, { message: "Rejected" });
