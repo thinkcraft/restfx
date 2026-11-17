@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { get as httpGet, ServerResponse } from "node:http";
+import type { IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import {
@@ -111,6 +113,139 @@ class UsersResource {
   }
 }
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+let canceledStreamFinalized = deferred();
+let releaseCanceledStream!: () => void;
+let pendingStreamStarted = deferred();
+let releasePendingStream!: () => void;
+let pendingStreamFinalized = deferred();
+let noConsumeStreamStarted = 0;
+let backpressurePulls = 0;
+let releaseErrorAfterFirstChunk!: () => void;
+let releaseInvalidAfterFirstChunk!: () => void;
+let releaseCleanupError!: () => void;
+let cleanupErrorFinalized = deferred();
+let errorBeforeFinalized = deferred();
+let errorAfterFinalized = deferred();
+
+class StreamingBehaviorResource {
+  @HttpGet("cancel")
+  async *cancel() {
+    try {
+      yield "first";
+      await new Promise<void>((resolve) => {
+        releaseCanceledStream = resolve;
+      });
+      yield "must not be pulled";
+    } finally {
+      canceledStreamFinalized.resolve();
+    }
+  }
+
+  @HttpGet("cancel-cleanup-error")
+  async *cancelWithCleanupError() {
+    try {
+      yield "first";
+      await new Promise<void>((resolve) => {
+        releaseCleanupError = resolve;
+      });
+    } finally {
+      cleanupErrorFinalized.resolve();
+      // noinspection ThrowInsideFinallyBlockJS
+      throw new Error("cleanup failed");
+    }
+  }
+
+  @HttpGet("pending")
+  async *pending() {
+    try {
+      pendingStreamStarted.resolve();
+      await new Promise<void>((resolve) => {
+        releasePendingStream = resolve;
+      });
+      yield "late chunk";
+    } finally {
+      pendingStreamFinalized.resolve();
+    }
+  }
+
+  @HttpGet("error-before")
+  async *errorBefore() {
+    try {
+      throw new Error("stream failed before the first chunk");
+      // noinspection UnreachableCodeJS
+      yield "unreachable";
+    } finally {
+      errorBeforeFinalized.resolve();
+    }
+  }
+
+  @HttpGet("error-after")
+  async *errorAfter() {
+    try {
+      yield "first";
+      await new Promise<void>((resolve) => {
+        releaseErrorAfterFirstChunk = resolve;
+      });
+      throw new Error("stream failed after the first chunk");
+    } finally {
+      errorAfterFinalized.resolve();
+    }
+  }
+
+  @HttpGet("invalid-before")
+  async *invalidBefore() {
+    yield 42;
+  }
+
+  @HttpGet("invalid-after")
+  async *invalidAfter() {
+    yield "first";
+    await new Promise<void>((resolve) => {
+      releaseInvalidAfterFirstChunk = resolve;
+    });
+    yield 42;
+  }
+
+  @HttpGet("head-stream")
+  async *headStream() {
+    noConsumeStreamStarted++;
+    yield "not consumed";
+  }
+
+  @HttpGet("no-content-stream")
+  noContentStream() {
+    return new HttpResult(204, this.noConsumeBody());
+  }
+
+  @HttpGet("not-modified-stream")
+  notModifiedStream() {
+    return new HttpResult(304, this.noConsumeBody());
+  }
+
+  @HttpGet("backpressure")
+  async *backpressure() {
+    backpressurePulls++;
+    yield "first";
+    backpressurePulls++;
+    yield "tail";
+  }
+
+  private async *noConsumeBody() {
+    noConsumeStreamStarted++;
+    yield "not consumed";
+  }
+}
+
 @HttpResource("api")
 class TestApi {
   @HttpResource()
@@ -178,6 +313,7 @@ class MiddlewareApi {
 
 describe("HttpServer resource decorators", () => {
   const server = new HttpServer(TestApi);
+  // noinspection DuplicatedCode
   let baseUrl: string;
 
   before(async () => {
@@ -445,6 +581,196 @@ describe("HttpServer resource decorators", () => {
     const response = await fetch(`${baseUrl}/missing`);
 
     assert.equal(response.status, 404);
+  });
+});
+
+describe("HttpServer streaming behavior", () => {
+  const server = new HttpServer(StreamingBehaviorResource);
+  let baseUrl: string;
+
+  before(async () => {
+    const listeningServer = server.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${address.port}`;
+  });
+
+  after(async () => {
+    await server.close();
+  });
+
+  it("finalizes a generator when the client cancels after a chunk", async () => {
+    canceledStreamFinalized = deferred();
+
+    const response = await fetch(`${baseUrl}/cancel`);
+    const reader = response.body!.getReader();
+    assert.equal(
+      new TextDecoder().decode((await reader.read()).value),
+      "first",
+    );
+
+    await reader.cancel();
+    releaseCanceledStream();
+    await canceledStreamFinalized.promise;
+  });
+
+  it("finalizes a generator after disconnect while next() is pending", async () => {
+    pendingStreamStarted = deferred();
+    pendingStreamFinalized = deferred();
+    const controller = new AbortController();
+    const pendingResponse = fetch(`${baseUrl}/pending`, {
+      signal: controller.signal,
+    });
+    void pendingResponse.catch(() => {});
+
+    await pendingStreamStarted.promise;
+    controller.abort();
+    await assert.rejects(pendingResponse);
+
+    releasePendingStream();
+    await pendingStreamFinalized.promise;
+  });
+
+  it("returns a 500 when a generator errors before sending headers", async () => {
+    errorBeforeFinalized = deferred();
+    const response = await fetch(`${baseUrl}/error-before`);
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      message: "Internal Server Error",
+    });
+    await errorBeforeFinalized.promise;
+  });
+
+  it("closes the connection when a generator errors after sending a chunk", async () => {
+    errorAfterFinalized = deferred();
+    const response = await fetch(`${baseUrl}/error-after`);
+    const reader = response.body!.getReader();
+
+    assert.equal(
+      new TextDecoder().decode((await reader.read()).value),
+      "first",
+    );
+    releaseErrorAfterFirstChunk();
+    await assert.rejects(reader.read());
+    await errorAfterFinalized.promise;
+  });
+
+  it("handles invalid chunks as errors before or after headers", async () => {
+    const before = await fetch(`${baseUrl}/invalid-before`);
+    assert.equal(before.status, 500);
+    assert.deepEqual(await before.json(), {
+      message: "Internal Server Error",
+    });
+
+    const after = await fetch(`${baseUrl}/invalid-after`);
+    const reader = after.body!.getReader();
+    assert.equal(
+      new TextDecoder().decode((await reader.read()).value),
+      "first",
+    );
+    releaseInvalidAfterFirstChunk();
+    await assert.rejects(reader.read());
+  });
+
+  it("does not start async generators for HEAD, 204, or 304 responses", async () => {
+    noConsumeStreamStarted = 0;
+
+    const head = await fetch(`${baseUrl}/head-stream`, { method: "HEAD" });
+    assert.equal(head.status, 200);
+    assert.equal(await head.text(), "");
+
+    const noContent = await fetch(`${baseUrl}/no-content-stream`);
+    assert.equal(noContent.status, 204);
+    assert.equal(await noContent.text(), "");
+
+    const notModified = await fetch(`${baseUrl}/not-modified-stream`);
+    assert.equal(notModified.status, 304);
+    assert.equal(await notModified.text(), "");
+    assert.equal(noConsumeStreamStarted, 0);
+  });
+
+  it(
+    "does not pull more chunks while the client is backpressured",
+    { timeout: 5_000 },
+    async () => {
+      backpressurePulls = 0;
+      let blockedResponse: ServerResponse | undefined;
+      const writeBlocked = deferred<ServerResponse>();
+      const originalWrite = ServerResponse.prototype.write;
+      ServerResponse.prototype.write = function (
+        chunk: any,
+        encodingOrCallback?: any,
+        callback?: any,
+      ) {
+        const result = originalWrite.call(
+          this,
+          chunk,
+          encodingOrCallback,
+          callback,
+        );
+        if (!blockedResponse) {
+          blockedResponse = this;
+          writeBlocked.resolve(this);
+          return false;
+        }
+        return result;
+      };
+
+      let response: IncomingMessage | undefined;
+      try {
+        response = await new Promise<IncomingMessage>((resolve, reject) => {
+          const request = httpGet(`${baseUrl}/backpressure`, (incoming) => {
+            incoming.pause();
+            resolve(incoming);
+          });
+          request.once("error", reject);
+        });
+
+        await writeBlocked.promise;
+        assert.equal(backpressurePulls, 1);
+        blockedResponse!.emit("drain");
+
+        let receivedBytes = 0;
+        response.on("data", (chunk: Buffer) => {
+          receivedBytes += chunk.byteLength;
+        });
+        response.resume();
+        await once(response, "end");
+
+        assert.equal(receivedBytes, Buffer.byteLength("firsttail"));
+        assert.equal(backpressurePulls, 2);
+      } finally {
+        ServerResponse.prototype.write = originalWrite;
+        response?.destroy();
+      }
+    },
+  );
+
+  it("suppresses rejected generator cleanup and closes cleanly after cancellation", async () => {
+    cleanupErrorFinalized = deferred();
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown) => {
+      unhandledRejections.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandledRejection);
+
+    try {
+      const response = await fetch(`${baseUrl}/cancel-cleanup-error`);
+      const reader = response.body!.getReader();
+      assert.equal(
+        new TextDecoder().decode((await reader.read()).value),
+        "first",
+      );
+      await reader.cancel();
+      releaseCleanupError();
+      await cleanupErrorFinalized.promise;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.deepEqual(unhandledRejections, []);
+      await server.close();
+    } finally {
+      process.off("unhandledRejection", onUnhandledRejection);
+    }
   });
 });
 
