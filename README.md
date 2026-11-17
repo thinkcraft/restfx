@@ -57,7 +57,8 @@ The playground includes an end-to-end test that runs its generated client
 against the in-process HTTP server and checks the OpenAPI document, successful
 operations, duplicate conflicts, and request validation. `pnpm test` runs this
 alongside the package tests. The server's request lifecycle hooks and
-`X-Request-Id` correlation behavior are demonstrated in the playground logs.
+`X-Request-Id` correlation behavior are demonstrated in the playground's
+colorized Pino logs.
 
 To explore the packages independently, run a package's test suite:
 
