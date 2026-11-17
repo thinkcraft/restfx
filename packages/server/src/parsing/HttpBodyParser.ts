@@ -8,11 +8,12 @@ export class HttpBodyParser {
       throw new RangeError("maxBytes must be a non-negative safe integer");
     }
 
-    if (!this.isJsonContentType(req.headers["content-type"])) {
+    const bodyFormat = this.getBodyFormat(req.headers["content-type"]);
+    if (bodyFormat === undefined) {
       req.resume();
       throw new HttpError(
         HttpStatusCode.UnsupportedMediaType,
-        "Content-Type must be application/json",
+        "Content-Type must be application/json or application/x-www-form-urlencoded",
       );
     }
 
@@ -44,6 +45,10 @@ export class HttpBodyParser {
       );
     }
 
+    if (bodyFormat === "urlencoded") {
+      return this.parseUrlEncoded<T>(body);
+    }
+
     try {
       return JSON.parse(body.toString("utf8")) as T;
     } catch (error) {
@@ -57,14 +62,35 @@ export class HttpBodyParser {
     }
   }
 
-  private isJsonContentType(contentType: string | undefined) {
+  private getBodyFormat(contentType: string | undefined) {
     const mediaType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
-    if (!mediaType?.startsWith("application/")) return false;
+    if (mediaType === "application/x-www-form-urlencoded") return "urlencoded";
+    if (!mediaType?.startsWith("application/")) return undefined;
 
     const subtype = mediaType.slice("application/".length);
-    return (
+    if (
       subtype === "json" ||
       (subtype.endsWith("+json") && subtype.length > "+json".length)
-    );
+    ) {
+      return "json";
+    }
+
+    return undefined;
+  }
+
+  private parseUrlEncoded<T>(body: Buffer): T {
+    const fields = new Map<string, string | string[]>();
+    for (const [key, value] of new URLSearchParams(body.toString("utf8"))) {
+      const existing = fields.get(key);
+      if (existing === undefined) {
+        fields.set(key, value);
+      } else if (Array.isArray(existing)) {
+        existing.push(value);
+      } else {
+        fields.set(key, [existing, value]);
+      }
+    }
+
+    return Object.fromEntries(fields) as T;
   }
 }

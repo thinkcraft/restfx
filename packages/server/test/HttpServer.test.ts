@@ -41,6 +41,14 @@ class PostsResource {
     return ctx.req.parseBody<{ title: string; tags: string[] }>();
   }
 
+  @HttpPost("form")
+  async form(ctx: HttpContext) {
+    return ctx.req.parseBody<{
+      name: string;
+      interests: string[];
+    }>();
+  }
+
   @HttpDelete()
   remove() {
     return new HttpResult(204);
@@ -123,6 +131,20 @@ describe("HttpServer resource decorators", () => {
     assert.deepEqual(await response.json(), payload);
   });
 
+  it("parses URL-encoded form request bodies", async () => {
+    const response = await fetch(`${baseUrl}/api/posts/form`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "name=Jane+Doe&interests=books&interests=music",
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      name: "Jane Doe",
+      interests: ["books", "music"],
+    });
+  });
+
   it("returns 400 for malformed JSON request bodies", async () => {
     const response = await fetch(`${baseUrl}/api/posts/echo`, {
       method: "POST",
@@ -136,7 +158,7 @@ describe("HttpServer resource decorators", () => {
     });
   });
 
-  it("returns 415 for non-JSON request bodies", async () => {
+  it("returns 415 for unsupported request content types", async () => {
     const response = await fetch(`${baseUrl}/api/posts/echo`, {
       method: "POST",
       headers: { "content-type": "text/plain" },
@@ -145,7 +167,8 @@ describe("HttpServer resource decorators", () => {
 
     assert.equal(response.status, 415);
     assert.deepEqual(await response.json(), {
-      message: "Content-Type must be application/json",
+      message:
+        "Content-Type must be application/json or application/x-www-form-urlencoded",
     });
   });
 

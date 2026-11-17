@@ -49,7 +49,25 @@ describe("HttpBodyParser", () => {
     assert.deepEqual(await parser.parse(request), { title: "Invalid request" });
   });
 
-  it("rejects missing and non-JSON Content-Type headers", async () => {
+  it("parses URL-encoded form fields and repeated values", async () => {
+    const body = Buffer.from(
+      "name=Jane+Doe&message=hello%2Bworld&tag=one&tag=two&empty=",
+    );
+    const request = createRequest(
+      [body],
+      body.byteLength,
+      "application/x-www-form-urlencoded; charset=UTF-8",
+    );
+
+    assert.deepEqual(await parser.parse(request), {
+      name: "Jane Doe",
+      message: "hello+world",
+      tag: ["one", "two"],
+      empty: "",
+    });
+  });
+
+  it("rejects missing and unsupported Content-Type headers", async () => {
     for (const contentType of [null, "text/plain"]) {
       const request = createRequest(
         [Buffer.from("{}")],
@@ -62,7 +80,8 @@ describe("HttpBodyParser", () => {
         (error: unknown) =>
           error instanceof HttpError &&
           error.status === HttpStatusCode.UnsupportedMediaType &&
-          error.message === "Content-Type must be application/json",
+          error.message ===
+            "Content-Type must be application/json or application/x-www-form-urlencoded",
       );
     }
   });
