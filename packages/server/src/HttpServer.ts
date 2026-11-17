@@ -5,6 +5,7 @@ import {
   ServerResponse,
   type ServerOptions,
 } from "node:http";
+import { randomUUID } from "node:crypto";
 import { HttpRequest } from "./HttpRequest.js";
 import { HttpContext } from "./HttpContext.js";
 import { HttpResponse } from "./HttpResponse.js";
@@ -16,6 +17,7 @@ import { HttpMediaType } from "./HttpMediaType.js";
 import { HttpRouter } from "./routing/HttpRouter.js";
 
 const streamClosed: unique symbol = Symbol("stream closed");
+const requestIdPattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/;
 
 export interface HttpServerOptions {
   /** Options passed to Node's `http.createServer()`. */
@@ -123,12 +125,15 @@ export class HttpServer {
     const startedAt = performance.now();
     let context: HttpContext | undefined;
     try {
+      const requestId = getRequestId(req.headers[HttpHeaderName.XRequestId]);
+      res.setHeader(HttpHeaderName.XRequestId, requestId);
       context = new HttpContext(
         new HttpRequest(
           req,
           this._trustProxy?.(req.socket.remoteAddress) ?? false,
         ),
         new HttpResponse(res),
+        requestId,
       );
       this.notify(this._onRequest, context);
       const result = await this._router.dispatch(context);
@@ -343,6 +348,11 @@ export class HttpServer {
       }
     }
   }
+}
+
+function getRequestId(value: string | string[] | undefined) {
+  if (typeof value === "string" && requestIdPattern.test(value)) return value;
+  return randomUUID();
 }
 
 function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {

@@ -39,6 +39,12 @@ bodies, query filters, and CRUD-style operations. Its seeded workspace ID is
 curl "http://localhost:3000/workspaces/550e8400-e29b-41d4-a716-446655440000/projects?status=active&limit=10"
 ```
 
+The playground includes an end-to-end test that runs its generated client
+against the in-process HTTP server and checks the OpenAPI document, successful
+operations, duplicate conflicts, and request validation. `pnpm test` runs this
+alongside the package tests. The server's request lifecycle hooks and
+`X-Request-Id` correlation behavior are demonstrated in the playground logs.
+
 Use `Enum` for fields whose values are restricted to a fixed set. It infers the
 literal union, validates values at runtime, and generates the corresponding
 OpenAPI enum schema:

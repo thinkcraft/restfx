@@ -6,4 +6,5 @@ export enum HttpHeaderName {
   Host = "host",
   XForwardedHost = "x-forwarded-host",
   XForwardedProto = "x-forwarded-proto",
+  XRequestId = "x-request-id",
 }

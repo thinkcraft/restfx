@@ -553,6 +553,18 @@ overwrite or sanitize forwarded headers, and do not trust arbitrary clients.
 stops accepting connections and waits for active requests to finish; it is safe
 to call before listening.
 
+Each request gets a `context.requestId`. The server accepts an incoming
+`X-Request-Id` only when it is a 1–128 character HTTP token; otherwise it
+generates a UUID. The selected ID is returned in the response header and is
+available to the `onRequest`, `onError`, and `onResponse` callbacks. Treat
+client-supplied IDs as correlation values, not trusted identity or authorization
+data.
+
+The server options expose lifecycle hooks for application logging and
+observability. `onResponse` receives status, duration, and completion metrics;
+observer exceptions are isolated from request handling. The playground shows a
+structured JSON logging example using these hooks.
+
 For a custom callback-based server, use Node's `createServer` from `node:http`
 directly. The decorated `HttpServer` API is intended for resource-based
 dispatch.

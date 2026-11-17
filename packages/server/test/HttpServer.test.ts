@@ -1457,6 +1457,43 @@ describe("HttpServer hooks", () => {
     assert.ok(observedResponses.some((metrics) => metrics.statusCode === 503));
     assert.ok(observedResponses.every((metrics) => metrics.completed));
   });
+
+  it("uses safe request IDs for response headers and lifecycle hooks", async () => {
+    const observedIds: string[] = [];
+    const server = new HttpServer(LifecycleApi, {
+      onRequest: (context) => observedIds.push(context.requestId),
+      onResponse: (context) => observedIds.push(context.requestId),
+    });
+    const listeningServer = server.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const suppliedIdResponse = await fetch(`${baseUrl}/`, {
+        headers: { "x-request-id": "playground-test-42" },
+      });
+      assert.equal(
+        suppliedIdResponse.headers.get("x-request-id"),
+        "playground-test-42",
+      );
+
+      const unsafeIdResponse = await fetch(`${baseUrl}/`, {
+        headers: { "x-request-id": "unsafe id" },
+      });
+      const generatedId = unsafeIdResponse.headers.get("x-request-id");
+      assert.match(generatedId ?? "", /^[0-9a-f-]{36}$/i);
+    } finally {
+      await server.close();
+    }
+
+    assert.deepEqual(observedIds.slice(0, 2), [
+      "playground-test-42",
+      "playground-test-42",
+    ]);
+    assert.equal(observedIds.length, 4);
+    assert.equal(observedIds[2], observedIds[3]);
+  });
 });
 
 describe("HttpServer route validation", () => {

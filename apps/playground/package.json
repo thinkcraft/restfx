@@ -6,7 +6,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc -b",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc -b --pretty false",
+    "test": "pnpm --filter @framework/server build && pnpm --filter @framework/client build && node --import tsx --test ./test"
   },
   "dependencies": {
     "@framework/client": "workspace:*",
