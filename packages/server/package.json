@@ -20,6 +20,7 @@
     "bench:routing": "node --import tsx ./bench/routing.bench.ts",
     "bench:http": "node --import tsx ./bench/http.bench.ts",
     "bench:http:express": "node --import tsx ./bench/http.bench.ts --server express",
+    "loadtest:http": "node --import tsx ./bench/http.load.ts",
     "profile:http": "node --import tsx ./bench/http.profile.ts"
   },
   "dependencies": {

@@ -588,6 +588,33 @@ substitute for production traffic tests. The separate `bench:routing` command
 measures router matching without HTTP or body parsing overhead. The HTTP
 benchmark runs the server in a separate process from its load-generating client.
 
+Run `pnpm --filter @framework/server loadtest:http` for a sustained local
+load/soak run. It drives concurrent keep-alive clients against a separate server
+process with a mix of JSON responses, validated JSON requests, and streamed
+responses. Periodic output reports throughput, approximate p50/p95/p99 latency,
+errors, server RSS/heap/external memory, and event-loop utilization. The server
+collects memory snapshots before and after forced garbage collection by default;
+post-GC heap is the most useful signal for retained-memory growth, while RSS can
+remain high after allocations are released. Forced collection adds pauses, so
+use `LOAD_FORCE_GC=0` for an unforced performance run and compare the results.
+
+Configure the run with `LOAD_DURATION_SECONDS` (default `60`),
+`LOAD_WARMUP_SECONDS` (default `10`), `LOAD_CONCURRENCY` (default `16`), and
+`LOAD_SAMPLE_SECONDS` (default `5`). Optionally set
+`LOAD_MAX_HEAP_GROWTH_MB` to fail if final post-GC heap exceeds the warmed-up
+baseline by that many MiB. For example:
+
+```sh
+LOAD_DURATION_SECONDS=600 LOAD_CONCURRENCY=32 LOAD_MAX_HEAP_GROWTH_MB=32 pnpm --filter @framework/server loadtest:http
+```
+
+This is a repeatable framework-level diagnostic, not proof that an application
+has no leaks. Run it for longer than expected leak accumulation times, under
+representative application traffic and deployment limits, and investigate a
+steady post-GC heap increase. RSS and heap limits are workload- and Node-version
+dependent; establish thresholds from a stable baseline rather than treating the
+defaults as production capacity guarantees.
+
 Pass concurrency directly to the benchmark script with:
 
 ```sh
