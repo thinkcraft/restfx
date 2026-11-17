@@ -1,0 +1,22 @@
+{
+  "name": "framework",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A full-stack TypeScript framework",
+  "type": "module",
+  "packageManager": "pnpm@11.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
+    "dev": "pnpm --filter @framework/playground dev",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
