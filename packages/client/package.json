@@ -41,7 +41,7 @@
     "build": "tsc -b",
     "prepack": "pnpm build",
     "generate": "node ./cli/generate.mjs",
-    "test": "pnpm build && node --import tsx --test ./test",
+    "test": "pnpm build && node --import tsx --test \"test/**/*.test.ts\"",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {

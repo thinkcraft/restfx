@@ -39,7 +39,7 @@
   "scripts": {
     "build": "tsc -b",
     "prepack": "pnpm build",
-    "test": "node --import tsx --test ./test",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
     "typecheck": "tsc -b --pretty false",
     "bench:routing": "node --import tsx ./bench/routing.bench.ts",
     "bench:http": "node --import tsx ./bench/http.bench.ts",

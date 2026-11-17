@@ -36,6 +36,6 @@
     "build": "tsc -b",
     "prepack": "pnpm build",
     "typecheck": "tsc -b --pretty false",
-    "test": "node --import tsx --test ./test"
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
   }
 }

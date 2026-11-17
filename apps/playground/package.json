@@ -9,7 +9,7 @@
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty false",
     "generate:client": "node --import tsx ./scripts/generate-client.ts && pnpm exec prettier --write src/api-client.ts",
-    "test": "pnpm --filter @restfx/server build && pnpm --filter @restfx/client build && node --import tsx --test ./test"
+    "test": "pnpm --filter @restfx/server build && pnpm --filter @restfx/client build && node --import tsx --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "@restfx/client": "workspace:*",
