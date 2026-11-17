@@ -23,6 +23,7 @@
     "dev": "pnpm --filter @restfx/playground dev",
     "docs:dev": "pnpm --filter @restfx/docs dev",
     "docs:build": "pnpm --filter @restfx/docs build",
+    "docs:publish": "gh workflow run deploy-docs.yml --ref main",
     "docs:preview": "pnpm --filter @restfx/docs preview",
     "typecheck": "tsc -b --pretty false",
     "start": "tsx packages/server/src",
