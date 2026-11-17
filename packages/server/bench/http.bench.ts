@@ -42,6 +42,32 @@ const concurrency = readPositiveInteger(
   cliOptions.concurrency,
 );
 
+// Prebuild response fixtures so both backends measure handling/serialization,
+// not constructing or filling response data in each handler.
+const invalidModelResponse = { error: "Invalid request model" };
+const parseJsonResponse = { ok: true };
+const parseFormResponse = { ok: true };
+const parseModelResponse = "benchmark payload";
+const parseBinaryResponse = { bytes: 16 * 1_024 };
+const parseMultipartResponse = {
+  note: "end-to-end benchmark",
+  filename: "sample.bin",
+  bytes: 4_096,
+};
+const responseJson = {
+  ok: true,
+  values: Array.from({ length: 64 }, (_, index) => index),
+};
+const responseText = "benchmark response ".repeat(256);
+const responseBinary = Buffer.alloc(16 * 1_024, 0x62);
+const responseStreamChunk = "s".repeat(1_024);
+const responseStreamSingleChunk = "s".repeat(16 * 1_024);
+const deepRouteResponse = {
+  tenantId: "acme",
+  projectId: "compiler",
+  issueId: "42",
+};
+
 @Model()
 class ValidatedRequest {
   @Field({ type: StringField, minLength: 3 })
@@ -57,82 +83,69 @@ class ValidatedRequest {
 class ParsingResource {
   @HttpPost({ path: "json" })
   async json(context: HttpContext) {
-    return context.req.parseBody<Record<string, unknown>>();
+    await context.req.parseBody<Record<string, unknown>>();
+    return parseJsonResponse;
   }
 
   @HttpPost({ path: "model", body: ValidatedRequest })
   async model(context: HttpContext) {
-    const value = await context.req.parseBody({ model: ValidatedRequest });
-    return value.label;
+    await context.req.parseBody({ model: ValidatedRequest });
+    return parseModelResponse;
   }
 
   @HttpPost({ path: "form" })
   async form(context: HttpContext) {
-    return context.req.parseBody<Record<string, unknown>>();
+    await context.req.parseBody<Record<string, unknown>>();
+    return parseFormResponse;
   }
 
   @HttpPost({ path: "binary" })
   async binary(context: HttpContext) {
-    const body = await context.req.parseBody<Buffer>();
-    return { bytes: body.byteLength };
+    await context.req.parseBody<Buffer>();
+    return parseBinaryResponse;
   }
 
   @HttpPost({ path: "multipart" })
   async multipart(context: HttpContext) {
-    const body = await context.req.parseBody<{
+    await context.req.parseBody<{
       note: string;
       upload: { filename: string; data: Buffer };
     }>();
-    return {
-      note: body.note,
-      filename: body.upload.filename,
-      bytes: body.upload.data.byteLength,
-    };
+    return parseMultipartResponse;
   }
 }
 
 class ResponseResource {
-  // noinspection JSUnusedLocalSymbols
-  private readonly binaryBody = Buffer.alloc(16 * 1024, 0x62);
-
   @HttpGet({ path: "json" })
   json() {
-    return {
-      ok: true,
-      values: Array.from({ length: 64 }, (_, index) => index),
-    };
+    return responseJson;
   }
 
   @HttpGet({ path: "text" })
   text() {
-    return "benchmark response ".repeat(256);
+    return responseText;
   }
 
   @HttpGet({ path: "binary" })
   binary() {
-    return this.binaryBody;
+    return responseBinary;
   }
 
   @HttpGet({ path: "stream" })
   async *stream() {
-    const chunk = "s".repeat(1_024);
-    for (let index = 0; index < 16; index++) yield chunk;
+    for (let index = 0; index < 16; index++) yield responseStreamChunk;
   }
 
   @HttpGet({ path: "stream-single" })
   async *streamSingle() {
-    yield "s".repeat(16 * 1_024);
+    yield responseStreamSingleChunk;
   }
 }
 
 class IssueResource {
   @HttpGet()
-  get(context: HttpContext) {
-    return {
-      tenantId: context.req.params.tenantId,
-      projectId: context.req.params.projectId,
-      issueId: context.req.params.issueId,
-    };
+  get() {
+    return deepRouteResponse;
   }
 }
 
@@ -361,14 +374,13 @@ async function runServerChild() {
 function createExpressServer(): BenchmarkServer {
   const app = express();
   const upload = multer({ storage: multer.memoryStorage() });
-  const binaryBody = Buffer.alloc(16 * 1_024, 0x62);
 
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: false, limit: "1mb" }));
   app.use(express.raw({ type: "application/octet-stream", limit: "1mb" }));
 
-  app.post("/bench/parse/json", (request, response) => {
-    response.json(request.body);
+  app.post("/bench/parse/json", (_request, response) => {
+    response.json(parseJsonResponse);
   });
   app.post("/bench/parse/model", (request, response) => {
     const { label, count, tags } = request.body as {
@@ -385,16 +397,16 @@ function createExpressServer(): BenchmarkServer {
       tags.length < 1 ||
       !tags.every((tag: unknown) => typeof tag === "string")
     ) {
-      response.status(422).json({ error: "Invalid request model" });
+      response.status(422).json(invalidModelResponse);
       return;
     }
-    response.type("text/plain").send(label);
+    response.type("text/plain").send(parseModelResponse);
   });
-  app.post("/bench/parse/form", (request, response) => {
-    response.json(request.body);
+  app.post("/bench/parse/form", (_request, response) => {
+    response.json(parseFormResponse);
   });
-  app.post("/bench/parse/binary", (request, response) => {
-    response.json({ bytes: (request.body as Buffer).byteLength });
+  app.post("/bench/parse/binary", (_request, response) => {
+    response.json(parseBinaryResponse);
   });
   app.post(
     "/bench/parse/multipart",
@@ -404,42 +416,32 @@ function createExpressServer(): BenchmarkServer {
         response.status(400).json({ error: "Missing upload" });
         return;
       }
-      response.json({
-        note: request.body.note,
-        filename: request.file.originalname,
-        bytes: request.file.buffer.byteLength,
-      });
+      response.json(parseMultipartResponse);
     },
   );
 
   app.get("/bench/response/json", (_request, response) => {
-    response.json({
-      ok: true,
-      values: Array.from({ length: 64 }, (_, index) => index),
-    });
+    response.json(responseJson);
   });
   app.get("/bench/response/text", (_request, response) => {
-    response.type("text/plain").send("benchmark response ".repeat(256));
+    response.type("text/plain").send(responseText);
   });
   app.get("/bench/response/binary", (_request, response) => {
-    response.send(binaryBody);
+    response.send(responseBinary);
   });
   app.get("/bench/response/stream", (_request, response) => {
-    const chunk = "s".repeat(1_024);
-    for (let index = 0; index < 16; index++) response.write(chunk);
+    for (let index = 0; index < 16; index++) {
+      response.write(responseStreamChunk);
+    }
     response.end();
   });
   app.get("/bench/response/stream-single", (_request, response) => {
-    response.end("s".repeat(16 * 1_024));
+    response.end(responseStreamSingleChunk);
   });
   app.get(
     "/bench/v1/tenants/:tenantId/projects/:projectId/issues/:issueId",
-    (request, response) => {
-      response.json({
-        tenantId: request.params.tenantId,
-        projectId: request.params.projectId,
-        issueId: request.params.issueId,
-      });
+    (_request, response) => {
+      response.json(deepRouteResponse);
     },
   );
 

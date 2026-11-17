@@ -93,6 +93,13 @@ export class HttpResponse {
     const closedResult = closed.then((): typeof streamClosed => streamClosed);
     let completed = false;
 
+    if (!this.res.hasHeader(HttpHeaderName.ContentType)) {
+      this.res.setHeader(
+        HttpHeaderName.ContentType,
+        "application/octet-stream",
+      );
+    }
+
     try {
       while (!this.res.destroyed) {
         const next = await Promise.race([iterator.next(), closedResult]);
@@ -108,27 +115,16 @@ export class HttpResponse {
             "Streaming response chunks must be strings or Uint8Array values",
           );
         }
-        if (!this.res.hasHeader(HttpHeaderName.ContentType)) {
-          this.res.setHeader(
-            HttpHeaderName.ContentType,
-            "application/octet-stream",
-          );
-        }
 
         if (!this.res.write(chunk) && !(await waitForDrain(this.res))) return;
       }
 
       if (!this.res.destroyed && !this.res.writableEnded) {
-        if (!this.res.hasHeader(HttpHeaderName.ContentType)) {
-          this.res.setHeader(
-            HttpHeaderName.ContentType,
-            "application/octet-stream",
-          );
-        }
         this.res.end();
       }
     } finally {
       this.res.off("close", closeHandler);
+
       if (!completed) {
         void Promise.resolve(iterator.return?.()).catch(() => {});
       }
