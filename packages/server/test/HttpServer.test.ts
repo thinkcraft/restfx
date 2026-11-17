@@ -36,6 +36,11 @@ class PostsResource {
     return new HttpResult(201, { id: 2 });
   }
 
+  @HttpPost("echo")
+  async echo(ctx: HttpContext) {
+    return ctx.req.parseBody<{ title: string; tags: string[] }>();
+  }
+
   @HttpDelete()
   remove() {
     return new HttpResult(204);
@@ -104,6 +109,44 @@ describe("HttpServer resource decorators", () => {
 
     assert.equal(response.status, 201);
     assert.deepEqual(await response.json(), { id: 2 });
+  });
+
+  it("parses JSON request bodies", async () => {
+    const payload = { title: "A post", tags: ["typescript", "http"] };
+    const response = await fetch(`${baseUrl}/api/posts/echo`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), payload);
+  });
+
+  it("returns 400 for malformed JSON request bodies", async () => {
+    const response = await fetch(`${baseUrl}/api/posts/echo`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{invalid json}",
+    });
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      message: "Invalid JSON request body",
+    });
+  });
+
+  it("returns 415 for non-JSON request bodies", async () => {
+    const response = await fetch(`${baseUrl}/api/posts/echo`, {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: "plain text",
+    });
+
+    assert.equal(response.status, 415);
+    assert.deepEqual(await response.json(), {
+      message: "Content-Type must be application/json",
+    });
   });
 
   it("matches and exposes named path parameters", async () => {

@@ -13,6 +13,8 @@ export enum HttpStatusCode {
   NotFound = 404,
   MethodNotAllowed = 405,
   Conflict = 409,
+  PayloadTooLarge = 413,
+  UnsupportedMediaType = 415,
   UnprocessableEntity = 422,
   TooManyRequests = 429,
   InternalServerError = 500,

@@ -1,9 +1,17 @@
 import { IncomingMessage } from "node:http";
+import { HttpBodyParser } from "./parsing/HttpBodyParser.js";
 
 export class HttpRequest {
+  private _body: unknown;
+  private readonly _bodyParser = new HttpBodyParser();
+
   readonly method: string;
   readonly url: URL;
   params: Record<string, string> = {};
+
+  get headers() {
+    return this.req.headers;
+  }
 
   get status() {
     return this.req.statusCode;
@@ -16,5 +24,13 @@ export class HttpRequest {
 
     this.method = this.req.method?.toUpperCase() ?? "GET";
     this.url = new URL(req.url!, `${proto}://${host}`);
+  }
+
+  async parseBody<T>(maxBytes = 1_048_576): Promise<T> {
+    if (!this._body) {
+      this._body = this._bodyParser.parse<T>(this.req, maxBytes);
+    }
+
+    return this._body as T;
   }
 }
