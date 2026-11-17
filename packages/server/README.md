@@ -60,7 +60,8 @@ otherwise streams default to `application/octet-stream`.
 
 ```ts
 @HttpGet("events")
-async *events() {
+async *events(context: HttpContext) {
+  context.res.setHeader("content-type", "text/event-stream; charset=utf-8");
   yield "event: ready\ndata: connected\n\n";
   yield "event: update\ndata: data available\n\n";
 }
