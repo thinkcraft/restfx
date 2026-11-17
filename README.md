@@ -203,3 +203,7 @@ The server package also includes a routing benchmark:
 ```sh
 pnpm --filter @restfx/server bench:routing
 ```
+
+## License
+
+RestFX is licensed under the [Apache License 2.0](LICENSE).
