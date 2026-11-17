@@ -23,6 +23,7 @@ import {
   type ModelConstructor,
 } from "@framework/core";
 import { getRequestModelMetadata } from "../request/RequestModelMetadata.js";
+import { getInjectedProperties } from "../metadata/InjectionMetadata.js";
 
 /** Discovers decorated resources and dispatches contexts to matching handlers. */
 export class HttpRouter {
@@ -54,7 +55,23 @@ export class HttpRouter {
   }
 
   async dispatch(context: HttpContext): Promise<HttpRouterResult> {
-    const middlewares = [...this._rootMiddlewares, ...this._requestMiddlewares];
+    const rootRequestResources = new Map<object, object>();
+    const rootMiddlewares = this._rootMiddlewares.map((middleware) => {
+      if (getInjectedProperties(middleware.resource).length === 0) {
+        return middleware;
+      }
+
+      let resource = rootRequestResources.get(middleware.resource);
+      if (!resource) {
+        resource = new (
+          middleware.resource.constructor as ResourceConstructor
+        )();
+        context.container.inject(resource);
+        rootRequestResources.set(middleware.resource, resource);
+      }
+      return { ...middleware, resource };
+    });
+    const middlewares = [...rootMiddlewares, ...this._requestMiddlewares];
     const invokeMiddleware = async (
       index: number,
     ): Promise<HttpRouterResult> => {
@@ -127,6 +144,7 @@ export class HttpRouter {
     const resource = new (
       match.route.resource.constructor as ResourceConstructor
     )();
+    context.container.inject(resource);
     const invokeHandler = async () => {
       if (match.route.requestModel) {
         await context.req.model(match.route.requestModel);
@@ -135,13 +153,25 @@ export class HttpRouter {
       }
       return await match.route.handler.call(resource, context);
     };
+    const requestResources = new Map<object, object>([
+      [match.route.resource, resource],
+    ]);
     const routeMiddlewares = match.route.middlewares
       .slice(this._rootMiddlewares.length)
-      .map((middleware) =>
-        middleware.resource === match.route.resource
-          ? { ...middleware, resource }
-          : middleware,
-      );
+      .map((middleware) => {
+        let requestResource = requestResources.get(middleware.resource);
+        if (!requestResource) {
+          requestResource = middleware.resource;
+          if (getInjectedProperties(middleware.resource).length > 0) {
+            requestResource = new (
+              middleware.resource.constructor as ResourceConstructor
+            )();
+            context.container.inject(requestResource);
+          }
+          requestResources.set(middleware.resource, requestResource);
+        }
+        return { ...middleware, resource: requestResource };
+      });
     const invokeMiddleware = async (index: number): Promise<unknown> => {
       const middleware = routeMiddlewares[index];
       if (!middleware) return invokeHandler();

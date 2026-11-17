@@ -14,6 +14,12 @@ export type {
 } from "./HttpServer.js";
 export { HttpRouter } from "./routing/HttpRouter.js";
 export { HttpContext } from "./HttpContext.js";
+export { IocContainer } from "./IocContainer.js";
+export type {
+  HttpServiceFactory,
+  HttpServiceLifestyle,
+  HttpServiceToken,
+} from "./IocContainer.js";
 export { HttpCookies } from "./HttpCookies.js";
 export type { HttpCookieOptions } from "./HttpCookies.js";
 export { HttpError } from "./HttpError.js";
@@ -31,6 +37,7 @@ export type {
   HttpMultipartValue,
 } from "./parsing/parseMultipartBody.js";
 export { HttpResource } from "./decorators/HttpResource.js";
+export { Inject } from "./decorators/Inject.js";
 export { HttpMiddleware } from "./decorators/HttpMiddleware.js";
 export { CorsMiddleware } from "./decorators/CorsMiddleware.js";
 export type { CorsMiddlewareOptions } from "./decorators/CorsMiddleware.js";

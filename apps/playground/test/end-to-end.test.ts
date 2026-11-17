@@ -6,12 +6,15 @@ import { describe, it } from "node:test";
 import { ApiError, createApiClient } from "../src/api-client.js";
 import { PlaygroundApi } from "../src/api.js";
 import { HttpServer } from "@framework/server";
+import { createPlaygroundContainer } from "../src/services.js";
 
 const exampleWorkspaceId = "550e8400-e29b-41d4-a716-446655440000";
 
 describe("playground end-to-end API", () => {
   it("keeps OpenAPI, generated client, validation, and server behavior aligned", async () => {
-    const server = new HttpServer(PlaygroundApi);
+    const server = new HttpServer(PlaygroundApi, {
+      container: createPlaygroundContainer(),
+    });
     const listeningServer = server.listen(0);
     await once(listeningServer, "listening");
     const address = listeningServer.address() as AddressInfo;

@@ -15,6 +15,7 @@ import { HttpStatusCode } from "./HttpStatusCode.js";
 import { HttpHeaderName } from "./HttpHeaderName.js";
 import { HttpMediaType } from "./HttpMediaType.js";
 import { HttpRouter } from "./routing/HttpRouter.js";
+import { IocContainer } from "./IocContainer.js";
 
 const streamClosed: unique symbol = Symbol("stream closed");
 const requestIdPattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/;
@@ -22,6 +23,8 @@ const requestIdPattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/;
 export interface HttpServerOptions {
   /** Options passed to Node's `http.createServer()`. */
   readonly serverOptions?: ServerOptions;
+  /** Root service container shared by requests. */
+  readonly container?: IocContainer;
   /**
    * Return true only when the connecting peer is a trusted reverse proxy.
    * Forwarded headers are ignored by default.
@@ -65,10 +68,12 @@ export class HttpServer {
   private readonly _onError?: HttpServerOptions["onError"];
   private readonly _onRequest?: HttpServerOptions["onRequest"];
   private readonly _onResponse?: HttpServerOptions["onResponse"];
+  private readonly _container: IocContainer;
   private _closePromise?: Promise<void>;
 
   constructor(rootResource: new () => object, options: HttpServerOptions = {}) {
     this._router = new HttpRouter(rootResource);
+    this._container = options.container ?? new IocContainer();
     this._trustProxy = options.trustProxy;
     this._errorHandler = options.errorHandler;
     this._onError = options.onError;
@@ -134,6 +139,7 @@ export class HttpServer {
         ),
         new HttpResponse(res),
         requestId,
+        this._container.createRequestScope(),
       );
       this.notify(this._onRequest, context);
       const result = await this._router.dispatch(context);

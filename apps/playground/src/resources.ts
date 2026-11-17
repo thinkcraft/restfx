@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   HttpContext,
   HttpDelete,
@@ -7,6 +6,7 @@ import {
   HttpPost,
   HttpResource,
   HttpResult,
+  Inject,
 } from "@framework/server";
 import {
   CreateProjectRequest,
@@ -20,53 +20,13 @@ import {
   UpdateProjectRequest,
   UpdateTaskRequest,
 } from "./models.js";
-
-const workspaceId = "550e8400-e29b-41d4-a716-446655440000";
-const projectId = "550e8400-e29b-41d4-a716-446655440001";
-const secondProjectId = "550e8400-e29b-41d4-a716-446655440002";
-const taskId = "550e8400-e29b-41d4-a716-446655440003";
-
-const workspaces = [
-  {
-    id: workspaceId,
-    name: "Northstar Studio",
-    plan: "enterprise",
-    region: "us-west-2",
-  },
-];
-
-const projects: ProjectResponse[] = [
-  {
-    id: projectId,
-    workspaceId,
-    name: "Customer portal",
-    description: "Modernize the self-service customer experience.",
-    status: "active",
-    tags: ["web", "customer-facing"],
-  },
-  {
-    id: secondProjectId,
-    workspaceId,
-    name: "Usage analytics",
-    description: "Usage reporting and export workflows.",
-    status: "archived",
-    tags: ["data", "reporting"],
-  },
-];
-
-const tasks: TaskResponse[] = [
-  {
-    id: taskId,
-    projectId,
-    title: "Design the account overview",
-    description: "Include usage, billing, and recent activity.",
-    priority: 2,
-    status: "in-progress",
-  },
-];
+import { ProjectService, TaskService, WorkspaceService } from "./services.js";
 
 @HttpResource("workspaces")
 export class WorkspacesResource {
+  @Inject(WorkspaceService)
+  private readonly workspaces!: WorkspaceService;
+
   @HttpGet({
     summary: "List workspaces",
     operationId: "listWorkspaces",
@@ -91,7 +51,7 @@ export class WorkspacesResource {
     },
   })
   list() {
-    return workspaces;
+    return this.workspaces.list();
   }
 
   @HttpGet({
@@ -105,9 +65,7 @@ export class WorkspacesResource {
   })
   get(context: HttpContext) {
     return (
-      workspaces.find(
-        (workspace) => workspace.id === context.req.params.workspaceId,
-      ) ?? new HttpResult(404)
+      this.workspaces.get(context.req.params.workspaceId) ?? new HttpResult(404)
     );
   }
 
@@ -117,6 +75,9 @@ export class WorkspacesResource {
 
 @HttpResource()
 class ProjectsResource {
+  @Inject(ProjectService)
+  private readonly projects!: ProjectService;
+
   @HttpGet({
     summary: "Search workspace projects",
     description:
@@ -144,26 +105,7 @@ class ProjectsResource {
   })
   async list(context: HttpContext) {
     const request = await context.req.model(ListProjectsRequest);
-    if (!workspaces.some((workspace) => workspace.id === request.workspaceId)) {
-      return new HttpResult(404);
-    }
-
-    const statuses = new Set(request.statuses ?? []);
-    const search = request.search?.toLocaleLowerCase();
-    const matching = projects.filter(
-      (project) =>
-        project.workspaceId === request.workspaceId &&
-        (statuses.size === 0 || statuses.has(project.status)) &&
-        (!search ||
-          project.name.toLocaleLowerCase().includes(search) ||
-          project.description?.toLocaleLowerCase().includes(search)),
-    );
-    const limit = request.limit ?? 20;
-    return {
-      items: matching.slice(0, limit),
-      total: matching.length,
-      limit,
-    };
+    return this.projects.list(request) ?? new HttpResult(404);
   }
 
   @HttpPost({
@@ -180,31 +122,9 @@ class ProjectsResource {
   })
   async create(context: HttpContext) {
     const request = await context.req.model(CreateProjectRequest);
-    if (!workspaces.some((workspace) => workspace.id === request.workspaceId)) {
-      return new HttpResult(404);
-    }
-    if (
-      projects.some(
-        (project) =>
-          project.workspaceId === request.workspaceId &&
-          project.name.toLocaleLowerCase() ===
-            request.body.name.toLocaleLowerCase(),
-      )
-    ) {
-      return new HttpResult(409);
-    }
-
-    const project: ProjectResponse = {
-      id: randomUUID(),
-      workspaceId: request.workspaceId,
-      name: request.body.name,
-      ...(request.body.description !== undefined
-        ? { description: request.body.description }
-        : {}),
-      status: "active",
-      tags: request.body.tags ?? [],
-    };
-    projects.push(project);
+    const project = this.projects.create(request);
+    if (project === undefined) return new HttpResult(404);
+    if (project === null) return new HttpResult(409);
     return new HttpResult(201, project);
   }
 
@@ -214,6 +134,9 @@ class ProjectsResource {
 
 @HttpResource()
 class ProjectResource {
+  @Inject(ProjectService)
+  private readonly projects!: ProjectService;
+
   @HttpGet({
     summary: "Get a project",
     operationId: "getProject",
@@ -225,12 +148,7 @@ class ProjectResource {
   async get(context: HttpContext) {
     const { workspaceId, projectId: requestedId } =
       await context.req.model(ProjectPathRequest);
-    return (
-      projects.find(
-        (project) =>
-          project.workspaceId === workspaceId && project.id === requestedId,
-      ) ?? new HttpResult(404)
-    );
+    return this.projects.get(workspaceId, requestedId) ?? new HttpResult(404);
   }
 
   @HttpPatch({
@@ -243,11 +161,7 @@ class ProjectResource {
   })
   async update(context: HttpContext) {
     const request = await context.req.model(UpdateProjectRequest);
-    const project = findProject(request.workspaceId, request.projectId);
-    if (!project) return new HttpResult(404);
-
-    Object.assign(project, request.body);
-    return project;
+    return this.projects.update(request) ?? new HttpResult(404);
   }
 
   @HttpDelete({
@@ -262,9 +176,11 @@ class ProjectResource {
   })
   async archive(context: HttpContext) {
     const request = await context.req.model(ProjectPathRequest);
-    const project = findProject(request.workspaceId, request.projectId);
+    const project = this.projects.archive(
+      request.workspaceId,
+      request.projectId,
+    );
     if (!project) return new HttpResult(404);
-    project.status = "archived";
     return new HttpResult(204);
   }
 
@@ -274,6 +190,9 @@ class ProjectResource {
 
 @HttpResource()
 class TasksResource {
+  @Inject(TaskService)
+  private readonly tasks!: TaskService;
+
   @HttpGet({
     summary: "List project tasks",
     operationId: "listTasks",
@@ -292,15 +211,7 @@ class TasksResource {
   })
   async list(context: HttpContext) {
     const request = await context.req.model(ListTasksRequest);
-    if (!findProject(request.workspaceId, request.projectId)) {
-      return new HttpResult(404);
-    }
-    const matching = tasks.filter(
-      (task) =>
-        task.projectId === request.projectId &&
-        (!request.status || task.status === request.status),
-    );
-    return matching.slice(0, request.limit ?? 100);
+    return this.tasks.list(request) ?? new HttpResult(404);
   }
 
   @HttpPost({
@@ -316,20 +227,8 @@ class TasksResource {
   })
   async create(context: HttpContext) {
     const request = await context.req.model(CreateTaskRequest);
-    if (!findProject(request.workspaceId, request.projectId)) {
-      return new HttpResult(404);
-    }
-    const task: TaskResponse = {
-      id: randomUUID(),
-      projectId: request.projectId,
-      title: request.body.title,
-      ...(request.body.description !== undefined
-        ? { description: request.body.description }
-        : {}),
-      priority: request.body.priority,
-      status: "todo",
-    };
-    tasks.push(task);
+    const task = this.tasks.create(request);
+    if (!task) return new HttpResult(404);
     return new HttpResult(201, task);
   }
 
@@ -339,6 +238,9 @@ class TasksResource {
 
 @HttpResource()
 class TaskResource {
+  @Inject(TaskService)
+  private readonly tasks!: TaskService;
+
   @HttpGet({
     summary: "Get a task",
     operationId: "getTask",
@@ -349,14 +251,9 @@ class TaskResource {
   })
   async get(context: HttpContext) {
     const request = await context.req.model(TaskPathRequest);
-    if (!findProject(request.workspaceId, request.projectId)) {
-      return new HttpResult(404);
-    }
     return (
-      tasks.find(
-        (task) =>
-          task.projectId === request.projectId && task.id === request.taskId,
-      ) ?? new HttpResult(404)
+      this.tasks.get(request.workspaceId, request.projectId, request.taskId) ??
+      new HttpResult(404)
     );
   }
 
@@ -370,23 +267,6 @@ class TaskResource {
   })
   async update(context: HttpContext) {
     const request = await context.req.model(UpdateTaskRequest);
-    if (!findProject(request.workspaceId, request.projectId)) {
-      return new HttpResult(404);
-    }
-    const task = tasks.find(
-      (item) =>
-        item.projectId === request.projectId && item.id === request.taskId,
-    );
-    if (!task) return new HttpResult(404);
-
-    Object.assign(task, request.body);
-    return task;
+    return this.tasks.update(request) ?? new HttpResult(404);
   }
-}
-
-function findProject(workspaceId: string, projectId: string) {
-  return projects.find(
-    (project) =>
-      project.workspaceId === workspaceId && project.id === projectId,
-  );
 }

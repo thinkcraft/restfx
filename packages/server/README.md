@@ -83,6 +83,66 @@ The example provides `GET /api/posts`, `GET /api/posts/:id`, and
 for other values. Return `HttpResult` to set a status, body, and headers
 explicitly. `HttpResponse.setHeader(name, value)` sets a response header.
 
+## Dependency injection
+
+Pass an `IocContainer` to `HttpServer` to register services. Singleton services
+are shared by all requests; request-lifetime services are created once per
+request scope. Unregistered class tokens resolve automatically with request
+lifetime. `@Inject(token)` accepts a string/symbol label or a class token and
+can decorate resource or service fields. The active request scope is available
+as `context.container`:
+
+```ts
+import {
+  IocContainer,
+  HttpContext,
+  HttpGet,
+  HttpResource,
+  HttpServer,
+  Inject,
+} from "@framework/server";
+
+class Clock {
+  now() {
+    return new Date();
+  }
+}
+
+const container = new IocContainer()
+  .registerSingleton(Clock, new Clock())
+  .registerRequest("request-started-at", () => new Date());
+
+@HttpResource()
+class HealthResource {
+  @Inject(Clock)
+  clock!: Clock;
+
+  @Inject("request-started-at")
+  startedAt!: Date;
+
+  @HttpGet()
+  health(context: HttpContext) {
+    return {
+      now: this.clock.now(),
+      startedAt: this.startedAt,
+      requestStart: context.container.get<Date>("request-started-at"),
+    };
+  }
+}
+
+const server = new HttpServer(HealthResource, { container });
+```
+
+`registerSingleton()` accepts either a ready-to-use instance or a factory;
+`registerInstance()` explicitly registers an instance, including a
+function-valued service. `register()` also accepts
+`{ lifetime: "singleton" | "request" }` as its third argument; request lifetime
+is the default. Register services on the root container before starting the
+server. Request-scoped services require a request scope, so resolving one
+directly from the root container throws. `@Inject` decorates instance fields,
+not static or JavaScript `#private` fields.
+Cookie/session storage and signing remain application responsibilities.
+
 ### Streaming responses
 
 Return an async generator directly, or use one as an `HttpResult` body. Each
