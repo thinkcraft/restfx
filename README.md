@@ -66,6 +66,8 @@ See the package guides below for the exact APIs, supported behavior, and example
   parsing, dependency injection, OpenAPI, and lifecycle behavior.
 - [Client and API generator](packages/client/README.md) — issue fetch requests
   or generate a typed client from an OpenAPI document.
+- [Releasing packages](RELEASING.md) — configure npm trusted publishing and
+  publish versioned releases with GitHub Actions.
 
 For a working example, start with the playground below, then browse
 `apps/playground/src` for the resource, model, and injected-service layout.

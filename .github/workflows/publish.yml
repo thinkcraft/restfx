@@ -1,0 +1,98 @@
+name: Publish npm packages
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check release tag
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const tag = process.env.GITHUB_REF_NAME;
+          for (const name of ["core", "server", "client"]) {
+            const { version } = JSON.parse(
+              readFileSync(`packages/${name}/package.json`, "utf8"),
+            );
+            if (tag !== `v${version}`) {
+              throw new Error(`Tag ${tag} does not match @restfx/${name}@${version}`);
+            }
+          }
+          NODE
+
+      - name: Ensure tag is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+  publish:
+    name: Publish packages
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Publish @restfx/core
+        run: pnpm --filter @restfx/core publish --access public --no-git-checks --provenance
+
+      - name: Publish @restfx/server
+        run: pnpm --filter @restfx/server publish --access public --no-git-checks --provenance
+
+      - name: Publish @restfx/client
+        run: pnpm --filter @restfx/client publish --access public --no-git-checks --provenance
