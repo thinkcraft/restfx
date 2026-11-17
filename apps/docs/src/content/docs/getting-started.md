@@ -64,6 +64,6 @@ generated client, explore the [playground](https://github.com/thinkcraft/restfx/
 
 ## Next steps
 
-- Learn about [shared models and validation](./models/).
-- Read the [server guide](./server/) for routing, middleware, and OpenAPI.
-- Use the [client package](./client/) to call your API from browser code.
+- Learn about [shared models and validation](../models/).
+- Read the [server guide](../server/) for routing, middleware, and OpenAPI.
+- Use the [client package](../client/) to call your API from browser code.

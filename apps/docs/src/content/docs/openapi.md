@@ -93,6 +93,6 @@ implications for your deployment. Omit `ui` to serve only the JSON document.
 
 OpenAPI generation describes the HTTP contract; it does not replace runtime
 validation or authentication. Security schemes and operation security describe
-the contract only; they do not authenticate requests. See [model validation](./models/) and
-[request handling](./request-handling/) for runtime behavior. The client
-generator consumes this document; see [typed clients](./client/).
+the contract only; they do not authenticate requests. See [model validation](../models/) and
+[request handling](../request-handling/) for runtime behavior. The client
+generator consumes this document; see [typed clients](../client/).

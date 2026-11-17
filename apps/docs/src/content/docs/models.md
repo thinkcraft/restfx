@@ -135,7 +135,7 @@ Core fields can declare `source: "path" | "query" | "header"` and an optional
 `sourceName` for the external parameter name. A nested model can use
 `source: "body"`. This metadata lets one model describe both the shape and
 validation rules and where the server reads each value. Core itself does not
-parse HTTP input; see [combined request models](./request-handling/).
+parse HTTP input; see [combined request models](../request-handling/).
 
 ## Typed configuration
 

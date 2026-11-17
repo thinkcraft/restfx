@@ -62,7 +62,7 @@ async create(context: HttpContext) {
 ```
 
 The server also supports request models assembled from path, query, header, and
-body values. See [request handling](./request-handling/) for parsing formats,
+body values. See [request handling](../request-handling/) for parsing formats,
 limits, combined request models, cookies, and streaming.
 
 ## Middleware, services, and OpenAPI
@@ -70,9 +70,9 @@ limits, combined request models, cookies, and streaming.
 Resources can use scoped middleware, and an `IocContainer` can provide
 singleton or request-lifetime services. The server can generate OpenAPI from
 routes and model metadata, with optional interactive documentation UIs. Follow
-the guides for [dependency injection](./dependency-injection/),
-[middleware and CORS](./middleware/), [OpenAPI](./openapi/), and
-[operations](./operations/).
+the guides for [dependency injection](../dependency-injection/),
+[middleware and CORS](../middleware/), [OpenAPI](../openapi/), and
+[operations](../operations/).
 
 For all server options and behavior, see the
 [`@restfx/server` README](https://github.com/thinkcraft/restfx/blob/main/packages/server/README.md).
