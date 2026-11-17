@@ -13,7 +13,8 @@
   "scripts": {
     "build": "tsc -b",
     "test": "node --import tsx --test ./test",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc -b --pretty false",
+    "bench:routing": "node --import tsx ./bench/routing.bench.ts"
   },
   "dependencies": {
     "@framework/core": "workspace:*"

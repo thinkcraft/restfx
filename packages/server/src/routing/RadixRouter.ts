@@ -1,7 +1,7 @@
 import type { Route } from "./Route.js";
 
 interface RadixNode {
-  readonly staticEdges: RadixEdge[];
+  readonly staticEdges: Map<string, RadixEdge>;
   parameterChild?: RadixNode;
   readonly routes: RadixRoute[];
 }
@@ -42,16 +42,14 @@ export class RadixRouter {
         continue;
       }
 
-      let edge = node.staticEdges.find(
-        (candidate) => candidate.segments[0] === segment,
-      );
+      let edge = node.staticEdges.get(segment);
       if (edge === undefined) {
         const end = nextParameterIndex(segments, index);
         edge = {
           segments: segments.slice(index, end),
           child: createNode(),
         };
-        node.staticEdges.push(edge);
+        node.staticEdges.set(segment, edge);
         node = edge.child;
         index = end;
         continue;
@@ -65,7 +63,7 @@ export class RadixRouter {
       if (commonLength < edge.segments.length) {
         const splitNode = createNode();
         const oldSuffix = edge.segments.slice(commonLength);
-        splitNode.staticEdges.push({
+        splitNode.staticEdges.set(oldSuffix[0]!, {
           segments: oldSuffix,
           child: edge.child,
         });
@@ -74,8 +72,9 @@ export class RadixRouter {
 
         const routeEnd = nextParameterIndex(segments, index + commonLength);
         if (routeEnd > index + commonLength) {
-          splitNode.staticEdges.push({
-            segments: segments.slice(index + commonLength, routeEnd),
+          const newSuffix = segments.slice(index + commonLength, routeEnd);
+          splitNode.staticEdges.set(newSuffix[0]!, {
+            segments: newSuffix,
             child: createNode(),
           });
         }
@@ -119,12 +118,13 @@ export class RadixRouter {
       }
 
       const requestSegment = requestSegments[index]!;
-      const staticEdge = node.staticEdges.find((edge) =>
-        edge.segments.every(
+      const staticEdge = node.staticEdges.get(requestSegment);
+      if (
+        staticEdge !== undefined &&
+        staticEdge.segments.every(
           (segment, offset) => requestSegments[index + offset] === segment,
-        ),
-      );
-      if (staticEdge !== undefined) {
+        )
+      ) {
         visit(
           staticEdge.child,
           index + staticEdge.segments.length,
@@ -151,7 +151,7 @@ export class RadixRouter {
 }
 
 function createNode(): RadixNode {
-  return { staticEdges: [], routes: [] };
+  return { staticEdges: new Map(), routes: [] };
 }
 
 function splitPath(path: string) {
