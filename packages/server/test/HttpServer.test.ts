@@ -23,6 +23,11 @@ class PostsResource {
     return { id: ctx.req.params.id };
   }
 
+  @HttpGet("featured")
+  getFeaturedPost() {
+    return { id: "featured", type: "static" };
+  }
+
   @HttpGet(":id/comments")
   getComments(ctx: HttpContext) {
     return [
@@ -194,6 +199,21 @@ describe("HttpServer resource decorators", () => {
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { id: "42" });
+  });
+
+  it("prefers static routes but falls back to matching parameter routes", async () => {
+    const staticResponse = await fetch(`${baseUrl}/api/posts/featured`);
+    assert.equal(staticResponse.status, 200);
+    assert.deepEqual(await staticResponse.json(), {
+      id: "featured",
+      type: "static",
+    });
+
+    // The static POST route does not handle GET, so the GET parameter route
+    // still matches, as it did with the previous router.
+    const parameterResponse = await fetch(`${baseUrl}/api/posts/create`);
+    assert.equal(parameterResponse.status, 200);
+    assert.deepEqual(await parameterResponse.json(), { id: "create" });
   });
 
   it("returns 204 for empty results", async () => {

@@ -5,7 +5,7 @@ import { HttpRouterResult } from "./HttpRouterResult.js";
 import { ResourceConstructor } from "../types/ResourceConstructor.js";
 import { getResourceHandlers } from "./getResourceHandlers.js";
 import { isResourceObject } from "./isResourceObject.js";
-import { matchPath } from "./matchPath.js";
+import { RadixRouter } from "./RadixRouter.js";
 import { normalizePath } from "./normalizePath.js";
 import { joinPaths } from "./joinPaths.js";
 import { getPathSpecificity } from "./getPathSpecificity.js";
@@ -13,27 +13,25 @@ import { HttpStatusCode } from "../HttpStatusCode.js";
 
 /** Discovers decorated resources and dispatches contexts to matching handlers. */
 export class HttpRouter {
-  private readonly _routes: Route[];
+  private readonly _routes: RadixRouter;
 
   constructor(rootResource: ResourceConstructor) {
-    this._routes = this.buildRoutes(rootResource);
+    this._routes = new RadixRouter();
+    for (const route of this.buildRoutes(rootResource)) {
+      this._routes.add(route);
+    }
   }
 
   async dispatch(context: HttpContext): Promise<HttpRouterResult> {
     const path = context.req.url.pathname;
     const method = context.req.method;
     const matches = this._routes
-      .map((candidate) => ({
-        route: candidate,
-        params: matchPath(candidate.path, path),
-      }))
-      .filter(
-        (
-          candidate,
-        ): candidate is typeof candidate & { params: Record<string, string> } =>
-          candidate.params !== undefined,
-      )
-      .sort((left, right) => right.route.specificity - left.route.specificity);
+      .match(path)
+      .sort(
+        (left, right) =>
+          right.route.specificity - left.route.specificity ||
+          left.order - right.order,
+      );
     const match = matches.find(
       (candidate) => candidate.route.method === method,
     );
