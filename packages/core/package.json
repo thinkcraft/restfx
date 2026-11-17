@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "Browser-safe shared models, validation, field types, and typed configuration for RestFX.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thinkcraft/restfx.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/thinkcraft/restfx/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/thinkcraft/restfx/issues"
+  },
   "keywords": [
     "restfx",
     "typescript",

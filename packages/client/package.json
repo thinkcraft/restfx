@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "Browser fetch client and OpenAPI client generator for RestFX.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thinkcraft/restfx.git",
+    "directory": "packages/client"
+  },
+  "homepage": "https://github.com/thinkcraft/restfx/tree/main/packages/client#readme",
+  "bugs": {
+    "url": "https://github.com/thinkcraft/restfx/issues"
+  },
   "keywords": [
     "restfx",
     "fetch",

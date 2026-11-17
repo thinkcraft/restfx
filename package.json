@@ -4,6 +4,14 @@
   "private": true,
   "description": "RestFX, a full-stack TypeScript framework",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thinkcraft/restfx.git"
+  },
+  "homepage": "https://github.com/thinkcraft/restfx#readme",
+  "bugs": {
+    "url": "https://github.com/thinkcraft/restfx/issues"
+  },
   "type": "module",
   "packageManager": "pnpm@11.1.0",
   "engines": {

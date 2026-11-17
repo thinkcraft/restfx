@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "Node.js HTTP server with decorated resources, routing, middleware, and OpenAPI for RestFX.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thinkcraft/restfx.git",
+    "directory": "packages/server"
+  },
+  "homepage": "https://github.com/thinkcraft/restfx/tree/main/packages/server#readme",
+  "bugs": {
+    "url": "https://github.com/thinkcraft/restfx/issues"
+  },
   "keywords": [
     "restfx",
     "http",
