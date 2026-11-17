@@ -3,23 +3,21 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { describe, it } from "node:test";
 import {
-  ArrayOf,
-  Body,
-  BooleanField,
-  Field,
-  HeaderParam,
   HttpContext,
   HttpGet,
   HttpPost,
   HttpResource,
   HttpServer,
-  Model,
   OpenApiMiddleware,
-  PathParam,
-  QueryParam,
+} from "../src/index.js";
+import {
+  ArrayOf,
+  BooleanField,
+  Field,
+  Model,
   StringField,
   UUID,
-} from "../src/index.js";
+} from "@framework/core";
 
 @Model()
 class CreateRequestBody {
@@ -29,19 +27,29 @@ class CreateRequestBody {
 
 @Model()
 class CreateRequest {
-  @PathParam({ type: UUID })
+  @Field({ type: UUID, source: "path" })
   userId!: string;
 
-  @QueryParam({ type: BooleanField, optional: true })
+  @Field({ type: BooleanField, optional: true, source: "query" })
   dryRun?: boolean;
 
-  @QueryParam({ type: ArrayOf(StringField), optional: true, name: "tag" })
+  @Field({
+    type: ArrayOf(StringField),
+    optional: true,
+    source: "query",
+    sourceName: "tag",
+  })
   tags?: string[];
 
-  @HeaderParam("x-client-id", { type: UUID, optional: true })
+  @Field({
+    type: UUID,
+    optional: true,
+    source: "header",
+    sourceName: "x-client-id",
+  })
   clientId?: string;
 
-  @Body(CreateRequestBody)
+  @Field({ model: CreateRequestBody, source: "body" })
   body!: CreateRequestBody;
 }
 
@@ -167,6 +175,15 @@ describe("HTTP request models", () => {
               requestBody: {
                 content: Record<string, { schema: Record<string, unknown> }>;
               };
+              "x-framework-client": {
+                requestModel: { $ref: string };
+                fields: Array<{
+                  property: string;
+                  source: string;
+                  name: string;
+                }>;
+                body: { property: string; model: { $ref: string } };
+              };
             };
           }
         >;
@@ -188,6 +205,19 @@ describe("HTTP request models", () => {
         operation.requestBody.content["application/json"]!.schema,
         { $ref: "#/components/schemas/CreateRequestBody" },
       );
+      assert.deepEqual(operation["x-framework-client"], {
+        requestModel: { $ref: "#/components/schemas/CreateRequest" },
+        fields: [
+          { property: "userId", source: "path", name: "userId" },
+          { property: "dryRun", source: "query", name: "dryRun" },
+          { property: "tags", source: "query", name: "tag" },
+          { property: "clientId", source: "header", name: "x-client-id" },
+        ],
+        body: {
+          property: "body",
+          model: { $ref: "#/components/schemas/CreateRequestBody" },
+        },
+      });
     });
   });
 });

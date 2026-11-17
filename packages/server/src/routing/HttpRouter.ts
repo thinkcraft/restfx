@@ -353,13 +353,16 @@ function validateRequestModelRoute(model: ModelConstructor, path: string) {
         `Path parameter ${field.name ?? field.property} from ${model.name || "request model"} is not present in route ${path}`,
       );
     }
-  }
-  if (requestMetadata.body) {
-    if (modelMetadata.fields.has(requestMetadata.body.property)) {
+    if (
+      field.source === "header" &&
+      !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(field.name ?? field.property)
+    ) {
       throw new TypeError(
-        `@Body field ${requestMetadata.body.property} must not also use @Field`,
+        `Header parameter ${field.name ?? field.property} is not a valid HTTP token`,
       );
     }
+  }
+  if (requestMetadata.body) {
     if (
       !requestMetadata.body.model ||
       !getModelMetadata(requestMetadata.body.model)

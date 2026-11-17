@@ -1,15 +1,11 @@
 import {
   ArrayOf,
-  Body,
   Field,
-  HeaderParam,
   IntegerField,
   Model,
-  PathParam,
-  QueryParam,
   StringField,
   UUID,
-} from "@framework/server";
+} from "@framework/core";
 
 @Model()
 export class CreateProjectBody {
@@ -77,28 +73,46 @@ export class UpdateTaskBody {
 
 @Model()
 export class ListProjectsRequest {
-  @PathParam({ type: UUID })
+  @Field({ type: UUID, source: "path" })
   workspaceId!: string;
 
-  @QueryParam({ type: StringField, optional: true })
+  @Field({ type: StringField, optional: true, source: "query" })
   search?: string;
 
-  @QueryParam({ type: ArrayOf(StringField), optional: true, name: "status" })
+  @Field({
+    type: ArrayOf(StringField),
+    optional: true,
+    source: "query",
+    sourceName: "status",
+  })
   statuses?: string[];
 
-  @QueryParam({ type: IntegerField, optional: true, minimum: 1, maximum: 50 })
+  @Field({
+    type: IntegerField,
+    optional: true,
+    minimum: 1,
+    maximum: 50,
+    source: "query",
+  })
   limit?: number;
 }
 
 @Model()
 export class CreateProjectRequest {
-  @PathParam({ type: UUID })
+  @Field({ type: UUID, source: "path" })
   workspaceId!: string;
 
-  @HeaderParam("idempotency-key", { type: UUID, optional: true })
+  @Field({
+    type: UUID,
+    optional: true,
+    source: "header",
+    sourceName: "idempotency-key",
+  })
   idempotencyKey?: string;
 
-  @Body(CreateProjectBody, {
+  @Field({
+    model: CreateProjectBody,
+    source: "body",
     description: "Project details and optional initial labels",
   })
   body!: CreateProjectBody;
@@ -106,46 +120,57 @@ export class CreateProjectRequest {
 
 @Model()
 export class ProjectPathRequest {
-  @PathParam({ type: UUID })
+  @Field({ type: UUID, source: "path" })
   workspaceId!: string;
 
-  @PathParam({ type: UUID })
+  @Field({ type: UUID, source: "path" })
   projectId!: string;
 }
 
 @Model()
 export class UpdateProjectRequest extends ProjectPathRequest {
-  @Body(UpdateProjectBody)
+  @Field({ model: UpdateProjectBody, source: "body" })
   body!: UpdateProjectBody;
 }
 
 @Model()
 export class ListTasksRequest extends ProjectPathRequest {
-  @QueryParam({ type: StringField, optional: true })
+  @Field({ type: StringField, optional: true, source: "query" })
   status?: string;
 
-  @QueryParam({ type: IntegerField, optional: true, minimum: 1, maximum: 100 })
+  @Field({
+    type: IntegerField,
+    optional: true,
+    minimum: 1,
+    maximum: 100,
+    source: "query",
+  })
   limit?: number;
 }
 
 @Model()
 export class CreateTaskRequest extends ProjectPathRequest {
-  @HeaderParam("x-client-version", { type: StringField, optional: true })
+  @Field({
+    type: StringField,
+    optional: true,
+    source: "header",
+    sourceName: "x-client-version",
+  })
   clientVersion?: string;
 
-  @Body(CreateTaskBody)
+  @Field({ model: CreateTaskBody, source: "body" })
   body!: CreateTaskBody;
 }
 
 @Model()
 export class TaskPathRequest extends ProjectPathRequest {
-  @PathParam({ type: UUID })
+  @Field({ type: UUID, source: "path" })
   taskId!: string;
 }
 
 @Model()
 export class UpdateTaskRequest extends TaskPathRequest {
-  @Body(UpdateTaskBody)
+  @Field({ model: UpdateTaskBody, source: "body" })
   body!: UpdateTaskBody;
 }
 

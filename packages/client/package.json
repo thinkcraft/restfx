@@ -12,6 +12,8 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "generate": "node --import tsx ./cli/generate.ts",
+    "test": "pnpm build && node --import tsx --test ./test",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {

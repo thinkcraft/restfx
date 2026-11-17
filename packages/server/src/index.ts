@@ -78,6 +78,7 @@ export type {
   FieldTypeConstructor,
   ModelConstructor,
   ModelFieldMetadata,
+  ModelFieldSource,
   ModelMetadata,
   ModelOptions,
   ValidationIssue,

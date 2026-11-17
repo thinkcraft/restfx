@@ -1,14 +1,19 @@
 import { Field } from "@framework/core";
-import type { FieldOptions, ModelConstructor } from "@framework/core";
+import type {
+  FieldOptions,
+  FieldTypeConstructor,
+  ModelConstructor,
+} from "@framework/core";
 import type { HttpRequestBodyOptions } from "../openapi/types.js";
 import {
   registerRequestField,
   type HttpRequestFieldSource,
 } from "../request/RequestModelMetadata.js";
 
-export interface HttpRequestFieldOptions<T = unknown> extends FieldOptions<T> {
-  readonly name?: string;
-}
+export type HttpRequestFieldOptions<T = unknown> = Omit<
+  Extract<FieldOptions<T>, { readonly type: FieldTypeConstructor<T> }>,
+  "source" | "sourceName"
+> & { readonly name?: string };
 
 export interface HttpBodyFieldOptions extends Pick<
   HttpRequestBodyOptions,
@@ -25,14 +30,11 @@ function sourceField(
     throw new TypeError("Request parameter name must not be empty");
   }
   const { name, ...fieldOptions } = options;
-  const fieldDecorator = Field(fieldOptions);
-  return (value: undefined, context: ClassFieldDecoratorContext) => {
-    fieldDecorator(value, context);
-    registerRequestField(
-      { source, ...(name !== undefined ? { name } : {}) },
-      context,
-    );
-  };
+  return Field({
+    ...fieldOptions,
+    source,
+    ...(name !== undefined ? { sourceName: name } : {}),
+  });
 }
 
 /** Declares a model property populated from a matched route parameter. */
@@ -51,11 +53,7 @@ export function HeaderParam(
   if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)) {
     throw new TypeError("Header parameter name must be a valid HTTP token");
   }
-  const fieldDecorator = Field(options);
-  return (value: undefined, context: ClassFieldDecoratorContext) => {
-    fieldDecorator(value, context);
-    registerRequestField({ source: "header", name }, context);
-  };
+  return Field({ ...options, source: "header", sourceName: name });
 }
 
 /** Declares a nested, model-validated request body property. */
@@ -70,15 +68,20 @@ export function Body(
     throw new RangeError("maxBytes must be a non-negative safe integer");
   }
 
-  return (_value: undefined, context: ClassFieldDecoratorContext) => {
+  const decorator = Field({
+    model,
+    source: "body",
+    ...(options.description ? { description: options.description } : {}),
+  });
+  return (value: undefined, context: ClassFieldDecoratorContext) => {
+    decorator(value, context);
     registerRequestField(
       {
         source: "body",
         model,
-        bodyOptions: {
-          ...(options.description ? { description: options.description } : {}),
-          ...(options.contentType ? { contentType: options.contentType } : {}),
-        },
+        bodyOptions: options.contentType
+          ? { contentType: options.contentType }
+          : {},
         ...(options.maxBytes !== undefined
           ? { bodyMaxBytes: options.maxBytes }
           : {}),

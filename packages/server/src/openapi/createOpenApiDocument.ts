@@ -176,7 +176,7 @@ function createOperation(
   for (const parameter of inferredPathParameters) {
     parameterMap.set(`${parameter.in}:${parameter.name}`, parameter);
   }
-  for (const parameter of getRequestModelParameters(route, path)) {
+  for (const parameter of getRequestModelParameters(route, path, modelNames)) {
     parameterMap.set(`${parameter.in}:${parameter.name}`, parameter);
   }
   for (const parameter of operation.parameters ?? []) {
@@ -271,6 +271,35 @@ function createOperation(
     ...operation,
     responses,
   };
+  const requestMetadata = route.requestModel
+    ? getRequestModelMetadata(route.requestModel)
+    : undefined;
+  const bodyField = requestMetadata?.body;
+  const bodyModel = getRouteBodyModel(route);
+  result["x-framework-client"] = {
+    ...(route.requestModel
+      ? {
+          requestModel: {
+            $ref: `#/components/schemas/${modelNames.get(route.requestModel)!}`,
+          },
+          fields: requestMetadata!.fields.map((field) => ({
+            property: field.property,
+            source: field.source,
+            name: field.name ?? field.property,
+          })),
+        }
+      : {}),
+    ...(bodyModel
+      ? {
+          body: {
+            property: bodyField?.property ?? "body",
+            model: {
+              $ref: `#/components/schemas/${modelNames.get(bodyModel)!}`,
+            },
+          },
+        }
+      : {}),
+  };
   if (result.operationId === undefined && defaultOperationId)
     result.operationId = defaultOperationId;
   delete result.parameters;
@@ -318,7 +347,11 @@ function getRouteBodyModel(route: Route) {
     : undefined;
 }
 
-function getRequestModelParameters(route: Route, path: string) {
+function getRequestModelParameters(
+  route: Route,
+  path: string,
+  modelNames: Map<ModelConstructor, string>,
+) {
   if (!route.requestModel) return [];
 
   const requestModel = route.requestModel;
@@ -360,7 +393,7 @@ function getRequestModelParameters(route: Route, path: string) {
             : !field.optional && field.default === undefined,
         ...(field.description ? { description: field.description } : {}),
         ...(field.deprecated ? { deprecated: true } : {}),
-        schema: createFieldSchema(field),
+        schema: createFieldSchema(field, modelNames),
       },
     ];
   });
@@ -404,6 +437,7 @@ function createModelNames(routes: readonly Route[]) {
   for (const route of routes) {
     if (route.bodyModel) models.add(route.bodyModel);
     if (route.requestModel) {
+      models.add(route.requestModel);
       const body = getRequestModelMetadata(route.requestModel).body;
       if (body?.model) models.add(body.model);
     }
@@ -448,11 +482,12 @@ function createModelSchema(
   const properties: Record<string, OpenApiSchema> = {};
   const required: string[] = [];
   for (const [name, field] of metadata.fields) {
-    properties[name] = createFieldSchema(field);
+    properties[name] = createFieldSchema(field, modelNames);
     if (!field.optional && field.default === undefined) required.push(name);
   }
 
   return {
+    "x-framework-model": model.name,
     type: "object",
     ...(required.length > 0 ? { required } : {}),
     properties,
@@ -460,10 +495,17 @@ function createModelSchema(
   };
 }
 
-function createFieldSchema(field: ModelFieldMetadata): OpenApiSchema {
+function createFieldSchema(
+  field: ModelFieldMetadata,
+  modelNames: Map<ModelConstructor, string>,
+): OpenApiSchema {
   const base = field.schema
     ? { ...field.schema }
-    : getFieldTypeSchema(field.type);
+    : field.model
+      ? { $ref: `#/components/schemas/${modelNames.get(field.model)!}` }
+      : field.type
+        ? getFieldTypeSchema(field.type)
+        : {};
 
   if (field.minLength !== undefined) base.minLength = field.minLength;
   if (field.maxLength !== undefined) base.maxLength = field.maxLength;
@@ -486,7 +528,7 @@ function createFieldSchema(field: ModelFieldMetadata): OpenApiSchema {
 }
 
 function getFieldTypeSchema(
-  type: ModelFieldMetadata["type"],
+  type: NonNullable<ModelFieldMetadata["type"]>,
 ): Record<string, unknown> {
   if (
     type === StringField ||

@@ -68,6 +68,24 @@ export function validateModel<T>(
       continue;
     }
 
+    if (field.model) {
+      try {
+        assign(name, validateModel(fieldValue, field.model));
+      } catch (error) {
+        if (!(error instanceof ModelValidationError)) throw error;
+        issues.push(
+          ...error.issues.map((issue) => ({
+            path: issue.path ? `${name}.${issue.path}` : name,
+            message: issue.message,
+          })),
+        );
+      }
+      continue;
+    }
+
+    if (!field.type) {
+      throw new TypeError(`Field ${name} is missing a field type`);
+    }
     const typeError = new field.type().validate(fieldValue);
     if (typeError !== undefined) {
       issues.push({ path: name, message: typeError });

@@ -9,6 +9,7 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@framework/client": "workspace:*",
     "@framework/core": "workspace:*",
     "@framework/server": "workspace:*"
   }

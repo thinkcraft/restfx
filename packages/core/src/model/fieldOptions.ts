@@ -16,11 +16,21 @@ export function validateModelOptions(options: ModelOptions) {
 }
 
 export function validateFieldOptions(options: FieldOptions) {
-  if (
+  if (options.source === "body") {
+    if (typeof options.model !== "function") {
+      throw new TypeError('@Field with source "body" requires a model');
+    }
+  } else if (
     typeof options.type !== "function" ||
     typeof options.type.prototype?.validate !== "function"
   ) {
     throw new TypeError("@Field requires a field type constructor");
+  }
+  if (options.sourceName !== undefined && options.source === undefined) {
+    throw new TypeError("sourceName requires a path, query, or header source");
+  }
+  if (options.sourceName !== undefined && options.sourceName.trim() === "") {
+    throw new TypeError("sourceName must not be empty");
   }
 
   if (options.pattern !== undefined && !(options.pattern instanceof RegExp)) {
@@ -77,7 +87,18 @@ export function validateFieldOptions(options: FieldOptions) {
     throw new RangeError("minItems cannot be greater than maxItems");
   }
 
-  if (Object.hasOwn(options, "default") && options.default !== undefined) {
+  if (
+    options.model &&
+    Object.hasOwn(options, "default") &&
+    options.default !== undefined
+  ) {
+    throw new TypeError("Nested model fields cannot have a default");
+  }
+  if (
+    options.type &&
+    Object.hasOwn(options, "default") &&
+    options.default !== undefined
+  ) {
     const defaultValue = options.default;
     if (defaultValue === null) {
       if (!options.nullable) {

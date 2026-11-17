@@ -252,11 +252,12 @@ export class HttpRequest {
     const input: Record<string, unknown> = {};
     for (const source of sourceMetadata.fields) {
       const field = modelMetadata.fields.get(source.property);
-      if (!field) {
+      if (!field || !field.type) {
         throw new TypeError(
           `Request source field ${source.property} is missing @Field metadata`,
         );
       }
+      const fieldType = field.type;
       const name = source.name ?? source.property;
       let value: unknown;
       switch (source.source) {
@@ -266,7 +267,7 @@ export class HttpRequest {
         case "query": {
           const values = this.url.searchParams.getAll(name);
           if (values.length > 0) {
-            value = hasArrayFieldType(field.type)
+            value = hasArrayFieldType(fieldType)
               ? values
               : values.length === 1
                 ? values[0]
@@ -278,7 +279,7 @@ export class HttpRequest {
           const header = this.headers[name.toLowerCase()];
           if (header !== undefined) {
             value =
-              hasArrayFieldType(field.type) && !Array.isArray(header)
+              hasArrayFieldType(fieldType) && !Array.isArray(header)
                 ? [header]
                 : header;
           }
@@ -286,32 +287,19 @@ export class HttpRequest {
         }
       }
       if (value !== undefined) {
-        input[source.property] = coerceRequestValue(value, field.type);
+        input[source.property] = coerceRequestValue(value, fieldType);
       }
     }
 
-    const result = this.validateRequestModel(input, model);
     if (sourceMetadata.body) {
       const bodyField = sourceMetadata.body;
-      if (modelMetadata.fields.has(bodyField.property)) {
-        throw new TypeError(
-          `@Body field ${bodyField.property} must not also use @Field`,
-        );
-      }
-      const body = await this.parseBody({
+      input[bodyField.property] = await this.parseBody({
         model: bodyField.model!,
         maxBytes: bodyField.bodyMaxBytes,
       });
-      Object.defineProperty(result, bodyField.property, {
-        configurable: true,
-        enumerable: true,
-        value: body,
-        writable: true,
-      });
-      return result;
     }
 
-    return result;
+    return this.validateRequestModel(input, model);
   }
 
   private validateRequestModel<T>(input: unknown, model: ModelConstructor<T>) {

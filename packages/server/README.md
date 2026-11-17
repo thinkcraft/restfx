@@ -242,28 +242,23 @@ streamed request bodies.
 
 ### Combined request models
 
-Use `@PathParam`, `@QueryParam`, `@HeaderParam`, and `@Body` to declare one
-request model spanning multiple HTTP sources. Path, query, and header fields
-also use normal `@Field` validation options; query/path/header strings are
-converted to booleans and numbers when their field type requires it. Repeated
-query values are supported with `ArrayOf`. A body remains a nested model and is
+Declare request sources directly in core `@Field` metadata. This lets the same
+model describe validation and where the server obtains each value, while the
+HTTP parsing remains server-only. Query, path, and header strings are converted
+to booleans and numbers when their core field type requires it. Repeated query
+values are supported with `ArrayOf`. A body is a nested core model and is
 parsed with the same bounded parser as `parseBody()`:
 
 ```ts
 import {
   ArrayOf,
-  Body,
   BooleanField,
   Field,
-  HeaderParam,
-  HttpContext,
-  HttpPost,
   Model,
-  PathParam,
-  QueryParam,
   StringField,
   UUID,
-} from "@framework/server";
+} from "@framework/core";
+import { HttpContext, HttpPost, HttpResource } from "@framework/server";
 
 @Model()
 class CreateUserBody {
@@ -273,22 +268,33 @@ class CreateUserBody {
 
 @Model()
 class CreateUserRequest {
-  @PathParam({ type: UUID })
+  @Field({ type: UUID, source: "path" })
   userId!: string;
 
-  @QueryParam({ type: BooleanField, optional: true })
+  @Field({ type: BooleanField, optional: true, source: "query" })
   dryRun?: boolean;
 
-  @QueryParam({ type: ArrayOf(StringField), optional: true, name: "tag" })
+  @Field({
+    type: ArrayOf(StringField),
+    optional: true,
+    source: "query",
+    sourceName: "tag",
+  })
   tags?: string[];
 
-  @HeaderParam("x-client-id", { type: UUID, optional: true })
+  @Field({
+    type: UUID,
+    optional: true,
+    source: "header",
+    sourceName: "x-client-id",
+  })
   clientId?: string;
 
-  @Body(CreateUserBody)
+  @Field({ model: CreateUserBody, source: "body" })
   body!: CreateUserBody;
 }
 
+@HttpResource("users")
 class UsersResource {
   @HttpPost({ path: ":userId", request: CreateUserRequest })
   async create(context: HttpContext) {
@@ -297,6 +303,11 @@ class UsersResource {
   }
 }
 ```
+
+The field-validation decorators and `validateModel()` are provided by
+`@framework/core`. The `@PathParam`, `@QueryParam`, `@HeaderParam`, and `@Body`
+decorators remain available from `@framework/server` as compatibility helpers
+for server-only request classes.
 
 The router validates configured request models before invoking the handler;
 calling `context.req.model(CreateUserRequest)` returns the same cached model

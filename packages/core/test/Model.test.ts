@@ -5,6 +5,7 @@ import {
   BooleanField,
   Email,
   Field,
+  getModelMetadata,
   IntegerField,
   Model,
   ModelValidationError,
@@ -112,6 +113,24 @@ class UUIDModel {
   id!: string;
 }
 
+@Model()
+class RequestBodyModel {
+  @Field({ type: StringField, minLength: 2 })
+  label!: string;
+}
+
+@Model()
+class SourcedRequestModel {
+  @Field({ type: UUID, source: "path" })
+  id!: string;
+
+  @Field({ type: StringField, source: "query", sourceName: "q" })
+  search!: string;
+
+  @Field({ model: RequestBodyModel, source: "body" })
+  body!: RequestBodyModel;
+}
+
 class UndecoratedModel {}
 
 function captureModelError(action: () => unknown) {
@@ -162,6 +181,39 @@ describe("shared model decorators", () => {
       },
     );
     assert.equal(Object.getPrototypeOf(value), ProfileModel.prototype);
+  });
+
+  it("stores request sources in core metadata and validates nested body models", () => {
+    const metadata = getModelMetadata(SourcedRequestModel)!;
+    assert.equal(metadata.fields.get("id")?.source, "path");
+    assert.equal(metadata.fields.get("search")?.source, "query");
+    assert.equal(metadata.fields.get("search")?.sourceName, "q");
+    assert.equal(metadata.fields.get("body")?.source, "body");
+
+    const value = validateModel(
+      {
+        id: "550e8400-e29b-41d4-a716-446655440000",
+        search: "term",
+        body: { label: "ok", extra: true },
+      },
+      SourcedRequestModel,
+    );
+    assert.equal(value.body instanceof RequestBodyModel, true);
+    assertModelData(value.body, { label: "ok" });
+
+    const error = captureModelError(() =>
+      validateModel(
+        {
+          id: "550e8400-e29b-41d4-a716-446655440000",
+          search: "term",
+          body: { label: "x" },
+        },
+        SourcedRequestModel,
+      ),
+    );
+    assert.deepEqual(error.issues, [
+      { path: "body.label", message: "Must contain at least 2 characters" },
+    ]);
   });
 
   it("applies defaults only to omitted fields and strips unknown fields", () => {

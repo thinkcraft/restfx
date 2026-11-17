@@ -23,6 +23,9 @@ importers:
 
   apps/playground:
     dependencies:
+      '@framework/client':
+        specifier: workspace:*
+        version: link:../../packages/client
       '@framework/core':
         specifier: workspace:*
         version: link:../../packages/core

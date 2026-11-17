@@ -7,8 +7,9 @@ export interface ValidationIssue {
 
 export type ModelConstructor<T = unknown> = new (...args: any[]) => T;
 
-export interface FieldOptions<T = unknown> {
-  readonly type: FieldTypeConstructor<T>;
+export type ModelFieldSource = "path" | "query" | "header" | "body";
+
+interface FieldOptionsBase<T> {
   /** Allows the property to be omitted. Defaults to false. */
   readonly optional?: boolean;
   /** Allows an explicit null value. Defaults to false. */
@@ -30,13 +31,40 @@ export interface FieldOptions<T = unknown> {
   readonly uniqueItems?: boolean;
 }
 
+export type FieldOptions<T = unknown> = FieldOptionsBase<T> &
+  (
+    | {
+        readonly type: FieldTypeConstructor<T>;
+        readonly model?: never;
+        readonly source?: never;
+        readonly sourceName?: never;
+      }
+    | {
+        readonly type: FieldTypeConstructor<T>;
+        readonly model?: never;
+        readonly source: "path" | "query" | "header";
+        /** External parameter name; defaults to the property name. */
+        readonly sourceName?: string;
+      }
+    | {
+        readonly type?: never;
+        readonly model: ModelConstructor<T>;
+        readonly source: "body";
+        readonly sourceName?: never;
+      }
+  );
+
 export interface ModelOptions {
   /** Unknown properties are stripped by default; "reject" opts into rejection. */
   readonly unknownFields?: "reject" | "strip";
 }
 
-export interface ModelFieldMetadata extends FieldOptions {
+export interface ModelFieldMetadata extends FieldOptionsBase<unknown> {
   readonly name: string;
+  readonly type?: FieldTypeConstructor;
+  readonly model?: ModelConstructor;
+  readonly source?: ModelFieldSource;
+  readonly sourceName?: string;
 }
 
 export interface ModelMetadata {
