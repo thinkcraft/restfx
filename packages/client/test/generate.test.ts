@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { unlink, writeFile } from "node:fs/promises";
 import { describe, it } from "node:test";
-import { generateClient } from "../src/generate.js";
+import { generateClient } from "../src";
 
 const openApiDocument = {
   openapi: "3.1.0",
@@ -145,7 +145,7 @@ describe("API client generator", () => {
       name: "extra",
       in: "query",
       required: false,
-      schema: { type: "string" },
+      schema: { type: "string", format: "string" },
     });
     assert.throws(
       () => generateClient(document, { models: "./models.js" }),

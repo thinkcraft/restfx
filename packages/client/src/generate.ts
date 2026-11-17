@@ -192,7 +192,7 @@ function generateOperation(
     }
     if (bodyModel) {
       lines.push(
-        `  const serializedBodyInput = JSON.stringify((input as Record<string, unknown>)[${JSON.stringify(bodyProperty)}]);`,
+        `  const serializedBodyInput = JSON.stringify(Reflect.get(input, ${JSON.stringify(bodyProperty)}));`,
       );
       lines.push(
         "  const bodyInput = serializedBodyInput === undefined ? undefined : JSON.parse(serializedBodyInput);",
@@ -266,14 +266,25 @@ function generateOperation(
   );
   lines.push("    throw new ApiError(response.status, errorBody);");
   lines.push("  }");
+  const emptySuccessStatuses = Object.entries<JsonObject>(
+    operation.responses ?? {},
+  )
+    .filter(
+      ([status, response]) =>
+        /^(?:2\d\d|2XX)$/.test(status) && !response.content,
+    )
+    .map(([status]) => status);
   if (responseType === "void") {
     lines.push("  return undefined;");
   } else {
-    lines.push(
-      "  if (response.status === 204 || response.status === 304) return undefined as " +
-        responseType +
-        ";",
-    );
+    if (emptySuccessStatuses.length > 0) {
+      const checks = emptySuccessStatuses
+        .filter((status) => /^2\d\d$/.test(status))
+        .map((status) => `response.status === ${Number(status)}`);
+      if (checks.length > 0) {
+        lines.push(`  if (${checks.join(" || ")}) return undefined;`);
+      }
+    }
     lines.push("  return await response.json() as " + responseType + ";");
   }
   lines.push("}");
