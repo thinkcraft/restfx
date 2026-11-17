@@ -129,6 +129,41 @@ class ComposedProfileModel {
 }
 
 @Model()
+class ConstructorGuardModel {
+  @Field({ type: StringField })
+  name!: string;
+
+  constructor() {
+    throw new Error("Model validation must not invoke constructors");
+  }
+}
+
+@Model({
+  unknownFields: "reject",
+  schema: { title: "Base", minProperties: 1 },
+  validate: (value: { base: string }) =>
+    value.base.length > 0
+      ? undefined
+      : { path: "base", message: "Must not be empty" },
+})
+class ValidatedBaseModel {
+  @Field({ type: StringField })
+  base!: string;
+}
+
+@Model({
+  schema: { description: "Derived" },
+  validate: (value: { derived: string }) =>
+    value.derived.length > 0
+      ? undefined
+      : { path: "derived", message: "Must not be empty" },
+})
+class ValidatedDerivedModel extends ValidatedBaseModel {
+  @Field({ type: StringField })
+  derived!: string;
+}
+
+@Model()
 class SpecialPropertyModel {
   @Field({ type: StringField })
   ["__proto__"]!: string;
@@ -708,6 +743,53 @@ describe("shared model decorators", () => {
     );
     assert.deepEqual(error.issues, [
       { path: "address.city", message: "Expected a string" },
+    ]);
+  });
+
+  it("does not invoke constructors while validating nested model fields", () => {
+    @Model()
+    class ConstructorParentModel {
+      @Field({ model: ConstructorGuardModel })
+      child!: ConstructorGuardModel;
+    }
+
+    const value = validateModel(
+      { child: { name: "Ada" } },
+      ConstructorParentModel,
+    );
+
+    assert.ok(value.child instanceof ConstructorGuardModel);
+    assertModelData(value.child, { name: "Ada" });
+  });
+
+  it("merges inherited schemas and runs base and derived validators", () => {
+    const value = validateModel(
+      { base: "parent", derived: "child" },
+      ValidatedDerivedModel,
+    );
+    assertModelData(value, { base: "parent", derived: "child" });
+    assert.deepEqual(getModelMetadata(ValidatedDerivedModel)?.options.schema, {
+      title: "Base",
+      minProperties: 1,
+      description: "Derived",
+    });
+
+    const validationError = captureModelError(() =>
+      validateModel({ base: "", derived: "" }, ValidatedDerivedModel),
+    );
+    assert.deepEqual(validationError.issues, [
+      { path: "base", message: "Must not be empty" },
+      { path: "derived", message: "Must not be empty" },
+    ]);
+
+    const unknownFieldError = captureModelError(() =>
+      validateModel(
+        { base: "parent", derived: "child", extra: true },
+        ValidatedDerivedModel,
+      ),
+    );
+    assert.deepEqual(unknownFieldError.issues, [
+      { path: "extra", message: "Unknown field" },
     ]);
   });
 

@@ -43,6 +43,51 @@ describe("IocContainer", () => {
     );
   });
 
+  it("allows request services to use singletons but prevents singleton capture of request services", () => {
+    const container = new IocContainer();
+    let singletonCreations = 0;
+    container.registerSingleton("shared", () => ({ id: ++singletonCreations }));
+    container.registerRequest("request-value", (scope) => ({
+      shared: scope.get<{ id: number }>("shared"),
+    }));
+    container.registerSingleton("invalid-singleton", (scope) =>
+      scope.get("request-value"),
+    );
+
+    const firstScope = container.createRequestScope();
+    const secondScope = container.createRequestScope();
+    const first = firstScope.get<{ shared: { id: number } }>("request-value");
+    const second = secondScope.get<{ shared: { id: number } }>("request-value");
+
+    assert.equal(singletonCreations, 1);
+    assert.equal(first.shared, second.shared);
+    assert.throws(
+      () => firstScope.get("invalid-singleton"),
+      /requires an HTTP request context/,
+    );
+  });
+
+  it("reports circular dependencies and allows later resolutions after failure", () => {
+    const container = new IocContainer();
+    container.registerRequest("first", (scope) => ({
+      second: scope.get("second"),
+    }));
+    container.registerRequest("second", (scope) => ({
+      first: scope.get("first"),
+    }));
+    const scope = container.createRequestScope();
+
+    assert.throws(
+      () => scope.get("first"),
+      /Circular service dependency: first/,
+    );
+
+    container.registerRequest("second", () => ({ value: "recovered" }));
+    assert.deepEqual(scope.get("first"), {
+      second: { value: "recovered" },
+    });
+  });
+
   it("exposes a request scope on context and injects resource properties", async () => {
     let nextId = 0;
     class RequestValue {

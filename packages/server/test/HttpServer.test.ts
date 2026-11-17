@@ -390,7 +390,7 @@ class StreamingBehaviorResource {
 
 @HttpResource("state")
 class StatefulResource {
-  private count = 0;
+  constructor(private count = 0) {}
 
   @HttpGet()
   get() {
@@ -403,7 +403,7 @@ class StatefulResource {
 class TestApi {
   static readonly posts = new PostsResource();
 
-  readonly state = new StatefulResource();
+  readonly state = new StatefulResource(99);
 
   @HttpResource()
   readonly users = new UsersResource();
