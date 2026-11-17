@@ -185,6 +185,7 @@ export class RadixRouter {
 
 function parseRouteSegments(segments: string[]): RouteSegment[] {
   const names = new Set<string>();
+  // noinspection UnnecessaryLocalVariableJS
   const parsed = segments.map((segment, index): RouteSegment => {
     if (!segment.startsWith(":")) return { type: "static", value: segment };
 

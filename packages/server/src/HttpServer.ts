@@ -14,6 +14,8 @@ import { HttpHeaderName } from "./HttpHeaderName.js";
 import { HttpMediaType } from "./HttpMediaType.js";
 import { HttpRouter } from "./routing/HttpRouter.js";
 
+const streamClosed: unique symbol = Symbol("stream closed");
+
 export interface HttpServerOptions {
   /**
    * Return true only when the connecting peer is a trusted reverse proxy.
@@ -206,21 +208,19 @@ export class HttpServer {
       closeHandler = resolve;
       res.once("close", closeHandler);
     });
+    const closedResult = closed.then((): typeof streamClosed => streamClosed);
     let completed = false;
 
     try {
       while (!res.destroyed) {
-        const next = await Promise.race([
-          iterator.next().then((result) => ({ type: "next" as const, result })),
-          closed.then(() => ({ type: "closed" as const })),
-        ]);
-        if (next.type === "closed") return;
-        if (next.result.done) {
+        const next = await Promise.race([iterator.next(), closedResult]);
+        if (next === streamClosed) return;
+        if (next.done) {
           completed = true;
           break;
         }
 
-        const chunk = next.result.value;
+        const chunk = next.value;
         if (typeof chunk !== "string" && !(chunk instanceof Uint8Array)) {
           throw new TypeError(
             "Streaming response chunks must be strings or Uint8Array values",

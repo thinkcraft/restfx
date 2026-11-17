@@ -6,7 +6,7 @@ import { HttpStatusCode } from "./HttpStatusCode.js";
 
 export class HttpRequest {
   private _body?: Promise<unknown>;
-  private readonly _bodyParser = new HttpBodyParser();
+  private _bodyParser?: HttpBodyParser;
 
   readonly method: string;
   readonly url: URL;
@@ -140,7 +140,10 @@ export class HttpRequest {
 
   async parseBody<T>(maxBytes = 1_048_576): Promise<T> {
     if (this._body === undefined) {
-      this._body = this._bodyParser.parse<T>(this.req, maxBytes);
+      this._body = (this._bodyParser ??= new HttpBodyParser()).parse<T>(
+        this.req,
+        maxBytes,
+      );
     }
 
     return (await this._body) as T;

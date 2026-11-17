@@ -74,7 +74,8 @@ export class HttpBodyParser {
 
     if (oversized) throw this.payloadTooLarge();
 
-    const body = Buffer.concat(chunks, totalBytes);
+    const body =
+      chunks.length === 1 ? chunks[0]! : Buffer.concat(chunks, totalBytes);
     if (contentLength !== undefined && contentLength !== body.length) {
       throw new HttpError(
         HttpStatusCode.BadRequest,

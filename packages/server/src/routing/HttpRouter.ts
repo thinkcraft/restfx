@@ -31,13 +31,14 @@ export class HttpRouter {
   async dispatch(context: HttpContext): Promise<HttpRouterResult> {
     const path = context.req.path;
     const method = context.req.method;
-    const matches = this._routes
-      .match(path)
-      .sort(
+    const matches = this._routes.match(path);
+    if (matches.length > 1) {
+      matches.sort(
         (left, right) =>
           right.route.specificity - left.route.specificity ||
           left.order - right.order,
       );
+    }
     const match =
       matches.find((candidate) => candidate.route.method === method) ??
       (method === "HEAD"

@@ -213,3 +213,13 @@ to call before listening.
 For a custom callback-based server, use Node's `createServer` from `node:http`
 directly. The decorated `HttpServer` API is intended for resource-based
 dispatch.
+
+## Benchmarks
+
+Run `pnpm --filter @framework/server bench:http` for a local end-to-end HTTP
+benchmark. It exercises JSON, URL-encoded, binary, and multipart request-body
+parsing; JSON, text, binary, and streaming responses; and a deeply nested route
+with named parameters. Results include requests per second and median time per
+request across samples. Set `BENCH_ITERATIONS`, `BENCH_SAMPLES`, and
+`BENCH_WARMUP` to adjust the run size. The separate `bench:routing` command
+measures router matching without HTTP or body parsing overhead.
