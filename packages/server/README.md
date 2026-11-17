@@ -11,6 +11,26 @@ new connections and waits for active requests; if the timeout expires, remaining
 connections are force-closed. The timeout is optional, so the default behavior
 continues to wait for requests to finish.
 
+## Contents
+
+- [Lifecycle hooks and errors](#lifecycle-hooks-and-errors)
+- [Quick start](#quick-start)
+- [Dependency injection](#dependency-injection)
+- [Streaming responses](#streaming-responses)
+- [Resources and handlers](#resources-and-handlers)
+- [Cookies](#cookies)
+- [Route parameters and HTTP methods](#route-parameters-and-http-methods)
+- [Middleware and CORS](#middleware)
+- [Request bodies and shared models](#request-bodies)
+- [Combined request models](#combined-request-models)
+- [OpenAPI](#openapi)
+- [Raw streaming uploads](#raw-streaming-uploads)
+- [Reverse proxies](#reverse-proxies)
+- [Server lifecycle](#server-lifecycle-and-lower-level-use)
+- [Benchmarks and load tests](#benchmarks)
+
+## Lifecycle hooks and errors
+
 Optional `onRequest`, `onResponse`, and `onError` hooks support application
 instrumentation. Response metrics include the status code, elapsed time, and
 whether the server ended the response. Hook exceptions are ignored so logging
@@ -49,6 +69,13 @@ import {
   HttpResult,
   HttpServer,
 } from "@framework/server";
+import { Field, Model, StringField } from "@framework/core";
+
+@Model()
+class CreatePost {
+  @Field({ type: StringField, minLength: 1 })
+  title!: string;
+}
 
 @HttpResource("posts")
 class PostsResource {
@@ -62,9 +89,9 @@ class PostsResource {
     return { id: context.req.params.id };
   }
 
-  @HttpPost()
+  @HttpPost({ body: CreatePost })
   async create(context: HttpContext) {
-    const post = await context.req.parseBody<{ title: string }>();
+    const post = await context.req.parseBody<CreatePost>();
     return new HttpResult(201, { id: "2", ...post });
   }
 }
@@ -82,6 +109,9 @@ The example provides `GET /api/posts`, `GET /api/posts/:id`, and
 `POST /api/posts`. Handler return values are sent as text for strings and JSON
 for other values. Return `HttpResult` to set a status, body, and headers
 explicitly. `HttpResponse.setHeader(name, value)` sets a response header.
+Because the POST route declares a body model, the server validates it before
+calling the handler; invalid fields return `422`. See
+[shared models](#shared-models) for field options and validation behavior.
 
 ## Dependency injection
 

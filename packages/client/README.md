@@ -1,10 +1,43 @@
 # `@framework/client`
 
-`@framework/client` contains a small fetch wrapper and an API client generator. The
-generator reads the framework's OpenAPI document, reuses the model classes named
-in its `x-framework-*` metadata, and emits typed operation methods. Requests
-backed by framework models are validated locally before the generated method
-calls `fetch`; the server must still validate every request independently.
+`@framework/client` contains a small fetch wrapper and an API client generator.
+It runs in environments with the standard Fetch API and does not require Node.js
+APIs at runtime. The generator reads the framework's OpenAPI document, reuses
+the model classes named in its `x-framework-*` metadata, and emits typed
+operation methods. Requests backed by framework models are validated locally
+before the generated method calls `fetch`; the server must still validate every
+request independently.
+
+## Contents
+
+- [Fetch wrapper](#fetch-wrapper)
+- [Generate a client](#generate-a-client)
+- [Supported request and response bodies](#supported-request-and-response-bodies)
+
+## Fetch wrapper
+
+Use `createClient()` when you want a small configurable wrapper around `fetch`
+without generating operation methods. It returns the standard `Response`, so
+the application chooses how to parse the body and handle status codes:
+
+```ts
+import { createClient } from "@framework/client";
+
+const client = createClient({
+  baseUrl: "https://api.example.test/v1/",
+  headers: { authorization: `Bearer ${token}` },
+});
+
+const response = await client.request("users", { method: "GET" });
+if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+const users: unknown = await response.json();
+```
+
+`baseUrl` is optional; without it, relative paths use the browser's current
+origin, or `http://localhost` in environments without `location`. Supply a
+custom Fetch-compatible function with `fetch` for testing or a custom runtime.
+Configured headers are combined with per-request headers, with the per-request
+values taking precedence.
 
 ## Generate a client
 
@@ -26,6 +59,11 @@ Arguments:
 - `--out`: the generated TypeScript file path, relative to the command's
   working directory (`packages/client` when run through the filtered command).
 
+The `--models` module must export every decorated model referenced by the
+document's framework metadata. Keep those imports available to the generated
+module at runtime as well as to TypeScript. Regenerate the file when routes or
+models change, and review generated diffs alongside the OpenAPI change.
+
 Generated files import `validateModel` from `@framework/core` and the fetch
 wrapper from `@framework/client`. The consuming application therefore needs
 those packages available at runtime. Configure the base URL and shared headers
@@ -41,6 +79,13 @@ const api = createApiClient({
 
 const record = await api.records.create({ id, payload: { name: "Example" } });
 ```
+
+The generated module exports `createApiClient()` and `ApiError`. `ApiError`
+contains the non-success HTTP status and parsed response body; network failures
+from `fetch` are passed through. Generated model-backed requests are validated
+before sending, but client validation is a convenience, not a security boundary.
+
+## Supported request and response bodies
 
 The generator supports JSON, `multipart/form-data`,
 `application/x-www-form-urlencoded`, text, and binary request and response

@@ -19,6 +19,18 @@ client, and a Node.js HTTP server with decorator-based resources and routing.
   [server README](packages/server/README.md) for usage and behavior.
 - `apps/playground` — runnable example application.
 
+## Guides
+
+- [Core models and validation](packages/core/README.md) — define shared models,
+  field constraints, nested models, and cross-field validation.
+- [HTTP server](packages/server/README.md) — routes, middleware, request
+  parsing, dependency injection, OpenAPI, and lifecycle behavior.
+- [Client and API generator](packages/client/README.md) — issue fetch requests
+  or generate a typed client from an OpenAPI document.
+
+For a working example, start with the playground below, then browse
+`apps/playground/src` for the resource, model, and injected-service layout.
+
 ## Getting started
 
 ```sh
@@ -27,7 +39,9 @@ pnpm dev
 ```
 
 The playground listens on <http://localhost:3000>. Set `PORT` to change the
-port.
+port. It is an example application, not a production server template: use its
+models and resource structure as a starting point, and configure application
+security, persistence, and deployment-specific limits for your own service.
 
 Open the interactive Swagger UI reference at <http://localhost:3000/docs>; the raw
 OpenAPI document is at <http://localhost:3000/openapi.json>. The sample API
@@ -44,6 +58,16 @@ against the in-process HTTP server and checks the OpenAPI document, successful
 operations, duplicate conflicts, and request validation. `pnpm test` runs this
 alongside the package tests. The server's request lifecycle hooks and
 `X-Request-Id` correlation behavior are demonstrated in the playground logs.
+
+To explore the packages independently, run a package's test suite:
+
+```sh
+pnpm --filter @framework/core test
+pnpm --filter @framework/server test
+pnpm --filter @framework/client test
+```
+
+The package guides describe each package's runtime boundary and examples.
 
 Use `Enum` for fields whose values are restricted to a fixed set. It infers the
 literal union, validates values at runtime, and generates the corresponding
