@@ -6,7 +6,7 @@ client, and a Node.js HTTP server with decorator-based resources and routing.
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 24 or newer
 - pnpm 11
 
 ## Workspace packages
