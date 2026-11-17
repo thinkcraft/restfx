@@ -221,5 +221,14 @@ benchmark. It exercises JSON, URL-encoded, binary, and multipart request-body
 parsing; JSON, text, binary, and streaming responses; and a deeply nested route
 with named parameters. Results include requests per second and median time per
 request across samples. Set `BENCH_ITERATIONS`, `BENCH_SAMPLES`, and
-`BENCH_WARMUP` to adjust the run size. The separate `bench:routing` command
-measures router matching without HTTP or body parsing overhead.
+`BENCH_WARMUP` to adjust the run size. Set `BENCH_CONCURRENCY` to a value
+greater than `1` to send requests from that many worker-thread clients;
+concurrent runs also report per-request p50 and p95 latency. The separate
+`bench:routing` command measures router matching without HTTP or body parsing
+overhead.
+
+Pass concurrency directly to the benchmark script with:
+
+```sh
+pnpm --filter @framework/server run bench:http -- --concurrency 4
+```
