@@ -446,15 +446,21 @@ dispatch.
 ## Benchmarks
 
 Run `pnpm --filter @framework/server bench:http` for a local end-to-end HTTP
-benchmark. It exercises JSON, URL-encoded, binary, and multipart request-body
-parsing; JSON, text, binary, and streaming responses; and a deeply nested route
-with named parameters. Results include requests per second and median time per
+benchmark. It exercises JSON and URL-encoded parsing, validated request models,
+binary and multipart request bodies; JSON, text, binary, and streaming
+responses; and a deeply nested route with named parameters. Results include
+requests per second and median time per
 request across samples. Set `BENCH_ITERATIONS`, `BENCH_SAMPLES`, and
 `BENCH_WARMUP` to adjust the run size. Set `BENCH_CONCURRENCY` to a value
 greater than `1` to send requests from that many worker-thread clients;
-concurrent runs also report per-request p50 and p95 latency. The separate
-`bench:routing` command measures router matching without HTTP or body parsing
-overhead.
+concurrent runs also report per-request p50, p95, and p99 latency. Run
+`pnpm --filter @framework/server bench:http:express` to exercise the same
+scenarios and client against Express 5 with its built-in JSON, URL-encoded, and
+raw-body parsers plus Multer's in-memory multipart parser. Compare the two runs
+on the same Node version and machine; this local end-to-end benchmark is not a
+substitute for production traffic tests. The separate `bench:routing` command
+measures router matching without HTTP or body parsing overhead. The HTTP
+benchmark runs the server in a separate process from its load-generating client.
 
 Pass concurrency directly to the benchmark script with:
 

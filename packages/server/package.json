@@ -18,10 +18,17 @@
     "test": "node --import tsx --test ./test",
     "typecheck": "tsc -b --pretty false",
     "bench:routing": "node --import tsx ./bench/routing.bench.ts",
-    "bench:http": "node --import tsx ./bench/http.bench.ts --concurrency 4",
+    "bench:http": "node --import tsx ./bench/http.bench.ts",
+    "bench:http:express": "node --import tsx ./bench/http.bench.ts --server express",
     "profile:http": "node --import tsx ./bench/http.profile.ts"
   },
   "dependencies": {
     "@framework/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
+    "express": "^5.3.0",
+    "multer": "^2.5.0"
   }
 }
