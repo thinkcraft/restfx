@@ -3,7 +3,7 @@ import { HttpHeaderName } from "./HttpHeaderName.js";
 import { HttpBodyParser } from "./parsing/HttpBodyParser.js";
 
 export class HttpRequest {
-  private _body: unknown;
+  private _body?: Promise<unknown>;
   private readonly _bodyParser = new HttpBodyParser();
 
   readonly method: string;
@@ -32,10 +32,10 @@ export class HttpRequest {
   }
 
   async parseBody<T>(maxBytes = 1_048_576): Promise<T> {
-    if (!this._body) {
+    if (this._body === undefined) {
       this._body = this._bodyParser.parse<T>(this.req, maxBytes);
     }
 
-    return this._body as T;
+    return (await this._body) as T;
   }
 }

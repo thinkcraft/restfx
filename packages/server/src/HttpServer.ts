@@ -4,7 +4,6 @@ import {
   Server,
   ServerResponse,
 } from "node:http";
-import { promisify } from "./utils/promisify.js";
 import { HttpRequest } from "./HttpRequest.js";
 import { HttpContext } from "./HttpContext.js";
 import { HttpResponse } from "./HttpResponse.js";
@@ -18,65 +17,99 @@ import { HttpRouter } from "./routing/HttpRouter.js";
 export class HttpServer {
   private readonly _server: Server;
   private readonly _router: HttpRouter;
+  private _closePromise?: Promise<void>;
 
   constructor(rootResource: new () => object) {
     this._router = new HttpRouter(rootResource);
     this._server = createServer(this.handleRequest.bind(this));
   }
 
-  async close() {
-    await promisify(this._server.close, this._server);
+  close() {
+    if (this._closePromise) return this._closePromise;
+    if (!this._server.listening) return Promise.resolve();
+
+    this._closePromise = new Promise<void>((resolve, reject) => {
+      try {
+        this._server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+    return this._closePromise;
   }
 
   listen(port = 3000) {
+    this._closePromise = undefined;
     return this._server.listen(port);
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse) {
-    const context = new HttpContext(
-      new HttpRequest(req),
-      new HttpResponse(res),
-    );
-
     try {
+      const context = new HttpContext(
+        new HttpRequest(req),
+        new HttpResponse(res),
+      );
       const result = await this._router.dispatch(context);
       if (!result.matched) {
         if (result.status === HttpStatusCode.MethodNotAllowed) {
           res.setHeader(HttpHeaderName.Allow, result.allowedMethods.join(", "));
-          res.statusCode = HttpStatusCode.MethodNotAllowed;
-          res.end("Method Not Allowed");
+          this.sendResult(
+            res,
+            new HttpResult(
+              HttpStatusCode.MethodNotAllowed,
+              "Method Not Allowed",
+            ),
+            req.method === "HEAD",
+          );
         } else {
-          res.statusCode = HttpStatusCode.NotFound;
-          res.end("Not Found");
+          this.sendResult(
+            res,
+            new HttpResult(HttpStatusCode.NotFound, "Not Found"),
+            req.method === "HEAD",
+          );
         }
         return;
       }
 
-      this.sendResult(res, result.value);
+      this.sendResult(res, result.value, req.method === "HEAD");
     } catch (error) {
       if (res.writableEnded) return;
 
       if (error instanceof HttpError) {
+        this.closeIncompleteRequest(req, res);
         this.sendResult(
           res,
           new HttpResult(error.status, {
             message: error.message,
             ...(error.details === undefined ? {} : { details: error.details }),
           }),
+          req.method === "HEAD",
         );
         return;
       }
 
+      this.closeIncompleteRequest(req, res);
       this.sendResult(
         res,
         new HttpResult(HttpStatusCode.InternalServerError, {
           message: "Internal Server Error",
         }),
+        req.method === "HEAD",
       );
     }
   }
 
-  private sendResult(res: ServerResponse, value: unknown) {
+  private closeIncompleteRequest(req: IncomingMessage, res: ServerResponse) {
+    if (req.complete || res.headersSent) return;
+    req.pause();
+    res.shouldKeepAlive = false;
+    res.setHeader("connection", "close");
+  }
+
+  private sendResult(res: ServerResponse, value: unknown, headRequest = false) {
     if (res.writableEnded) return;
 
     const result =
@@ -97,21 +130,45 @@ export class HttpServer {
     ) {
       res.end();
     } else if (typeof body === "string" || Buffer.isBuffer(body)) {
+      const output = body;
       if (!res.hasHeader(HttpHeaderName.ContentType)) {
         res.setHeader(
           HttpHeaderName.ContentType,
           `${HttpMediaType.TextPlain}; charset=utf-8`,
         );
       }
-      res.end(body);
+      if (headRequest) {
+        if (!res.hasHeader(HttpHeaderName.ContentLength)) {
+          res.setHeader(
+            HttpHeaderName.ContentLength,
+            Buffer.isBuffer(output)
+              ? output.byteLength
+              : Buffer.byteLength(output),
+          );
+        }
+        res.end();
+      } else {
+        res.end(output);
+      }
     } else {
+      const output = JSON.stringify(body);
       if (!res.hasHeader(HttpHeaderName.ContentType)) {
         res.setHeader(
           HttpHeaderName.ContentType,
           `${HttpMediaType.ApplicationJson}; charset=utf-8`,
         );
       }
-      res.end(JSON.stringify(body));
+      if (headRequest) {
+        if (!res.hasHeader(HttpHeaderName.ContentLength)) {
+          res.setHeader(
+            HttpHeaderName.ContentLength,
+            output === undefined ? 0 : Buffer.byteLength(output),
+          );
+        }
+        res.end();
+      } else {
+        res.end(output);
+      }
     }
   }
 }

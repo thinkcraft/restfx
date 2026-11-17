@@ -8,6 +8,7 @@ function createRequest(
   chunks: Buffer[],
   contentLength?: number,
   contentType: string | null = "application/json",
+  rawHeaders?: string[],
 ) {
   const headers: Record<string, string> = { host: "localhost" };
   if (contentLength !== undefined) {
@@ -21,6 +22,7 @@ function createRequest(
     headers,
     method: "POST",
     url: "/",
+    ...(rawHeaders === undefined ? {} : { rawHeaders }),
   }) as unknown as IncomingMessage;
 }
 
@@ -168,6 +170,26 @@ describe("HttpBodyParser", () => {
     }
   });
 
+  it("rejects malformed Content-Type parameters", async () => {
+    for (const contentType of [
+      "application",
+      'application/json; charset="utf-8',
+      "application/json; charset=utf 8",
+      "application/json; charset=utf-8; charset=utf-8",
+    ]) {
+      await assert.rejects(
+        () =>
+          parser.parse(
+            createRequest([Buffer.from("{}")], undefined, contentType),
+          ),
+        (error: unknown) =>
+          error instanceof HttpError &&
+          error.status === HttpStatusCode.BadRequest &&
+          error.message === "Invalid Content-Type header",
+      );
+    }
+  });
+
   it("rejects a body whose byte length does not match Content-Length", async () => {
     const body = Buffer.from(JSON.stringify({ text: "café" }));
     const request = createRequest([body], body.byteLength - 1);
@@ -191,6 +213,161 @@ describe("HttpBodyParser", () => {
         error instanceof HttpError &&
         error.status === HttpStatusCode.BadRequest &&
         error.message === "Invalid JSON request body",
+    );
+  });
+
+  it("rejects invalid UTF-8 in JSON and URL-encoded bodies", async () => {
+    const invalidUtf8 = Buffer.from([0x7b, 0x22, 0x78, 0x22, 0x3a, 0xff, 0x7d]);
+    await assert.rejects(
+      () => parser.parse(createRequest([invalidUtf8])),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest,
+    );
+
+    await assert.rejects(
+      () =>
+        parser.parse(
+          createRequest(
+            [Buffer.from("name=%E0%A4%A")],
+            undefined,
+            "application/x-www-form-urlencoded",
+          ),
+        ),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest &&
+        error.message === "Invalid URL-encoded request body",
+    );
+  });
+
+  it("rejects ambiguous and invalid request framing headers", async () => {
+    const duplicateLength = createRequest(
+      [Buffer.from("{}")],
+      2,
+      "application/json",
+      ["host", "localhost", "content-length", "2", "content-length", "2"],
+    );
+    await assert.rejects(
+      () => parser.parse(duplicateLength),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest &&
+        error.message === "Multiple content-length headers are not allowed",
+    );
+
+    const requestWithBothFramingHeaders = createRequest([Buffer.from("{}")], 2);
+    requestWithBothFramingHeaders.headers["transfer-encoding"] = "chunked";
+    await assert.rejects(
+      () => parser.parse(requestWithBothFramingHeaders),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest &&
+        error.message ===
+          "Content-Length and Transfer-Encoding cannot be used together",
+    );
+
+    const invalidLength = createRequest([Buffer.from("{}")], 2);
+    invalidLength.headers["content-length"] = "2e0";
+    await assert.rejects(
+      () => parser.parse(invalidLength),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest &&
+        error.message === "Invalid Content-Length header",
+    );
+
+    const chunked = createRequest([Buffer.from('{"chunked":true}')]);
+    chunked.headers["transfer-encoding"] = "chunked";
+    assert.deepEqual(await parser.parse(chunked), { chunked: true });
+  });
+
+  it("turns interrupted request streams into a client error", async () => {
+    const interruptedStream = Readable.from(
+      (async function* () {
+        yield Buffer.from("{");
+        throw new Error("simulated disconnect");
+      })(),
+    );
+    const request = Object.assign(interruptedStream, {
+      headers: {
+        host: "localhost",
+        "content-type": "application/json",
+      },
+      method: "POST",
+      url: "/",
+    }) as unknown as IncomingMessage;
+
+    await assert.rejects(
+      () => parser.parse(request),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest &&
+        error.message ===
+          "Request body was interrupted before it was fully received",
+    );
+  });
+
+  it("rejects a declared body over the limit before reading it", async () => {
+    const request = createRequest([Buffer.from("not consumed")], 100);
+    await assert.rejects(
+      () => parser.parse(request, 8),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.PayloadTooLarge,
+    );
+  });
+
+  it("bounds multipart part count and rejects invalid part headers", async () => {
+    const boundary = "limit-boundary";
+    const parts = Array.from(
+      { length: 1_001 },
+      () =>
+        `--${boundary}\r\nContent-Disposition: form-data; name="a"\r\n\r\nx\r\n`,
+    ).join("");
+    const tooManyParts = createRequest(
+      [Buffer.from(`${parts}--${boundary}--\r\n`)],
+      undefined,
+      `multipart/form-data; boundary=${boundary}`,
+    );
+    await assert.rejects(
+      () => parser.parse(tooManyParts),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest,
+    );
+
+    const malformedHeader = createRequest(
+      [
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition : form-data; name="a"\r\n\r\nx\r\n--${boundary}--`,
+        ),
+      ],
+      undefined,
+      `multipart/form-data; boundary=${boundary}`,
+    );
+    await assert.rejects(
+      () => parser.parse(malformedHeader),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest &&
+        error.message === "Invalid multipart/form-data request body",
+    );
+  });
+
+  it("limits URL-encoded field counts to prevent excessive object expansion", async () => {
+    const body = Buffer.from(
+      Array.from({ length: 10_001 }, (_, index) => `field${index}=x`).join("&"),
+    );
+    await assert.rejects(
+      () =>
+        parser.parse(
+          createRequest([body], undefined, "application/x-www-form-urlencoded"),
+        ),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest &&
+        error.message === "URL-encoded request body contains too many fields",
     );
   });
 

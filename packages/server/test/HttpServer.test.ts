@@ -7,6 +7,7 @@ import {
   HttpDelete,
   HttpGet,
   HttpMiddleware,
+  HttpMethod,
   HttpPost,
   HttpResource,
   HttpResult,
@@ -284,13 +285,139 @@ describe("HttpServer resource decorators", () => {
     const response = await fetch(`${baseUrl}/api/posts`, { method: "PUT" });
 
     assert.equal(response.status, 405);
-    assert.equal(response.headers.get("allow"), "GET, DELETE");
+    assert.equal(response.headers.get("allow"), "GET, DELETE, HEAD, OPTIONS");
+  });
+
+  it("automatically serves HEAD using GET resource information without a body", async () => {
+    const getResponse = await fetch(`${baseUrl}/api/posts/42`);
+    const getBody = await getResponse.text();
+    const headResponse = await fetch(`${baseUrl}/api/posts/42`, {
+      method: "HEAD",
+    });
+
+    assert.equal(headResponse.status, 200);
+    assert.equal(await headResponse.text(), "");
+    assert.equal(
+      headResponse.headers.get("content-length"),
+      String(Buffer.byteLength(getBody)),
+    );
+  });
+
+  it("automatically answers OPTIONS with the methods available on a resource", async () => {
+    const response = await fetch(`${baseUrl}/api/posts/42`, {
+      method: "OPTIONS",
+    });
+
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get("allow"), "GET, HEAD, OPTIONS");
+    assert.equal(await response.text(), "");
+
+    const unknown = await fetch(`${baseUrl}/missing`, { method: "OPTIONS" });
+    assert.equal(unknown.status, 404);
+  });
+
+  it("suppresses bodies for HEAD errors while preserving status and headers", async () => {
+    const response = await fetch(`${baseUrl}/api/posts`, { method: "HEAD" });
+
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "");
+    assert.ok(Number(response.headers.get("content-length")) > 0);
+  });
+
+  it("returns 400 for malformed URL-encoded integration requests", async () => {
+    const response = await fetch(`${baseUrl}/api/posts/form`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "name=%E0%A4%A",
+    });
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      message: "Invalid URL-encoded request body",
+    });
+  });
+
+  it("returns 413 for oversized requests without keeping the connection alive", async () => {
+    const response = await fetch(`${baseUrl}/api/posts/echo`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: Buffer.alloc(1_048_577, 0x20),
+    });
+
+    assert.equal(response.status, 413);
+    assert.equal(response.headers.get("connection"), "close");
+    assert.deepEqual(await response.json(), {
+      message: "Request body exceeds the maximum allowed size",
+    });
   });
 
   it("returns 404 for an unknown path", async () => {
     const response = await fetch(`${baseUrl}/missing`);
 
     assert.equal(response.status, 404);
+  });
+});
+
+let releaseSlowRequest!: () => void;
+let notifySlowRequestStarted!: () => void;
+const slowRequestStarted = new Promise<void>((resolve) => {
+  notifySlowRequestStarted = resolve;
+});
+
+class LifecycleResource {
+  @HttpGet("slow")
+  async slow() {
+    notifySlowRequestStarted();
+    await new Promise<void>((resolve) => {
+      releaseSlowRequest = resolve;
+    });
+    return new HttpResult(200, { completed: true }, { connection: "close" });
+  }
+
+  @HttpMethod("GET", "ready")
+  ready() {
+    return { ready: true };
+  }
+}
+
+@HttpResource()
+class LifecycleApi extends LifecycleResource {}
+
+describe("HttpServer lifecycle", () => {
+  it("closes safely before listen and waits for active requests during shutdown", async () => {
+    const server = new HttpServer(LifecycleApi);
+
+    await server.close();
+    const listeningServer = server.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+    const pendingResponse = fetch(`http://127.0.0.1:${address.port}/slow`);
+    await slowRequestStarted;
+
+    const closePromise = server.close();
+    assert.strictEqual(server.close(), closePromise);
+    let didClose = false;
+    void closePromise.then(() => {
+      didClose = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(didClose, false);
+
+    releaseSlowRequest();
+    const response = await pendingResponse;
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { completed: true });
+    await closePromise;
+    await server.close();
+
+    const restartedServer = server.listen(0);
+    await once(restartedServer, "listening");
+    const restartedAddress = restartedServer.address() as AddressInfo;
+    const readyResponse = await fetch(
+      `http://127.0.0.1:${restartedAddress.port}/ready`,
+    );
+    assert.equal(readyResponse.status, 200);
+    await server.close();
   });
 });
 

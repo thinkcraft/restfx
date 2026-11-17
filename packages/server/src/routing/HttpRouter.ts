@@ -14,6 +14,8 @@ import { normalizePath } from "./normalizePath.js";
 import { joinPaths } from "./joinPaths.js";
 import { getPathSpecificity } from "./getPathSpecificity.js";
 import { HttpStatusCode } from "../HttpStatusCode.js";
+import { HttpResult } from "../HttpResult.js";
+import { HttpHeaderName } from "../HttpHeaderName.js";
 
 /** Discovers decorated resources and dispatches contexts to matching handlers. */
 export class HttpRouter {
@@ -36,14 +38,23 @@ export class HttpRouter {
           right.route.specificity - left.route.specificity ||
           left.order - right.order,
       );
-    const match = matches.find(
-      (candidate) => candidate.route.method === method,
-    );
+    const match =
+      matches.find((candidate) => candidate.route.method === method) ??
+      (method === "HEAD"
+        ? matches.find((candidate) => candidate.route.method === "GET")
+        : undefined);
 
     if (!match) {
-      const allowedMethods = [
-        ...new Set(matches.map(({ route }) => route.method)),
-      ];
+      const allowedMethods = this.getAllowedMethods(matches);
+
+      if (method === "OPTIONS" && allowedMethods.length > 0) {
+        return {
+          matched: true,
+          value: new HttpResult(HttpStatusCode.NoContent, undefined, {
+            [HttpHeaderName.Allow]: allowedMethods.join(", "),
+          }),
+        };
+      }
 
       return allowedMethods.length > 0
         ? {
@@ -82,6 +93,19 @@ export class HttpRouter {
 
     const value = await invokeMiddleware(0);
     return { matched: true, value };
+  }
+
+  private getAllowedMethods(matches: ReturnType<RadixRouter["match"]>) {
+    const allowedMethods = [
+      ...new Set(matches.map(({ route }) => route.method)),
+    ];
+    if (allowedMethods.includes("GET") && !allowedMethods.includes("HEAD")) {
+      allowedMethods.push("HEAD");
+    }
+    if (allowedMethods.length > 0 && !allowedMethods.includes("OPTIONS")) {
+      allowedMethods.push("OPTIONS");
+    }
+    return allowedMethods;
   }
 
   private buildRoutes(rootResource: ResourceConstructor): Route[] {

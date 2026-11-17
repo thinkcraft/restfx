@@ -3,14 +3,9 @@ import { HttpStatusCode } from "../HttpStatusCode.js";
 
 export function parseJsonBody<T>(body: Buffer): T {
   try {
-    return JSON.parse(body.toString("utf8")) as T;
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      throw new HttpError(
-        HttpStatusCode.BadRequest,
-        "Invalid JSON request body",
-      );
-    }
-    throw error;
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(body);
+    return JSON.parse(text) as T;
+  } catch {
+    throw new HttpError(HttpStatusCode.BadRequest, "Invalid JSON request body");
   }
 }

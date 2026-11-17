@@ -14,6 +14,12 @@ export type HttpMultipartData = Record<
   HttpMultipartValue | HttpMultipartValue[]
 >;
 
+const MAX_MULTIPART_PARTS = 1_000;
+const MAX_MULTIPART_HEADER_BYTES = 16_384;
+const MAX_MULTIPART_HEADERS = 32;
+const MAX_MULTIPART_FIELD_NAME_LENGTH = 1_024;
+const MAX_MULTIPART_FILENAME_LENGTH = 1_024;
+
 export function getMultipartBoundary(contentType: string | undefined) {
   if (contentType === undefined) return undefined;
   const parameters = parseHeaderParameters(contentType);
@@ -37,6 +43,7 @@ export function parseMultipartBody(
   const marker = Buffer.from(`--${boundary}`);
   const separator = Buffer.from(`\r\n--${boundary}`);
   const fields = new Map<string, HttpMultipartValue | HttpMultipartValue[]>();
+  let partCount = 0;
 
   // Multipart permits an optional preamble before its first boundary.
   let firstBoundary = body.indexOf(marker);
@@ -74,10 +81,24 @@ export function parseMultipartBody(
 
     const headersStart = position + 2;
     const headersEnd = body.indexOf(Buffer.from("\r\n\r\n"), headersStart);
-    if (headersEnd < 0) throw invalidMultipart();
+    if (
+      headersEnd < 0 ||
+      headersEnd - headersStart > MAX_MULTIPART_HEADER_BYTES
+    ) {
+      throw invalidMultipart();
+    }
+    partCount++;
+    if (partCount > MAX_MULTIPART_PARTS) throw invalidMultipart();
     const headers = parseMultipartHeaders(
       body.subarray(headersStart, headersEnd).toString("latin1"),
     );
+    const contentType = headers.get("content-type");
+    if (
+      contentType !== undefined &&
+      !parseHeaderParameters(contentType)?.get("")?.includes("/")
+    ) {
+      throw invalidMultipart();
+    }
     const disposition = headers.get("content-disposition");
     const dispositionParameters =
       disposition === undefined
@@ -85,7 +106,12 @@ export function parseMultipartBody(
         : parseHeaderParameters(disposition);
     if (
       dispositionParameters?.get("")?.toLowerCase() !== "form-data" ||
-      !dispositionParameters.has("name")
+      !dispositionParameters.has("name") ||
+      dispositionParameters.get("name") === "" ||
+      dispositionParameters.get("name")!.length >
+        MAX_MULTIPART_FIELD_NAME_LENGTH ||
+      (dispositionParameters.get("filename")?.length ?? 0) >
+        MAX_MULTIPART_FILENAME_LENGTH
     ) {
       throw invalidMultipart();
     }
@@ -104,12 +130,10 @@ export function parseMultipartBody(
     const filename = dispositionParameters.get("filename");
     const value: HttpMultipartValue =
       filename === undefined
-        ? body.subarray(dataStart, boundaryStart).toString("utf8")
+        ? decodeMultipartField(body.subarray(dataStart, boundaryStart))
         : {
             filename,
-            contentType:
-              headers.get("content-type") ??
-              HttpMediaType.ApplicationOctetStream,
+            contentType: contentType ?? HttpMediaType.ApplicationOctetStream,
             data: body.subarray(dataStart, boundaryStart),
           };
     const existing = fields.get(name);
@@ -129,12 +153,19 @@ function parseMultipartHeaders(rawHeaders: string) {
   const headers = new Map<string, string>();
   if (rawHeaders.length === 0) throw invalidMultipart();
 
-  for (const line of rawHeaders.split("\r\n")) {
+  const lines = rawHeaders.split("\r\n");
+  if (lines.length > MAX_MULTIPART_HEADERS) throw invalidMultipart();
+
+  for (const line of lines) {
     const separator = line.indexOf(":");
     if (separator <= 0) throw invalidMultipart();
-    const name = line.slice(0, separator).trim().toLowerCase();
+    const name = line.slice(0, separator).toLowerCase();
     const value = line.slice(separator + 1).trim();
-    if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name) || headers.has(name)) {
+    if (
+      !/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name) ||
+      headers.has(name) ||
+      /[\u0000-\u0008\u000a-\u001f\u007f]/.test(value)
+    ) {
       throw invalidMultipart();
     }
     headers.set(name, value);
@@ -143,7 +174,15 @@ function parseMultipartHeaders(rawHeaders: string) {
   return headers;
 }
 
-function parseHeaderParameters(header: string) {
+function decodeMultipartField(body: Buffer) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(body);
+  } catch {
+    throw invalidMultipart();
+  }
+}
+
+export function parseHeaderParameters(header: string) {
   const segments: string[] = [];
   let segmentStart = 0;
   let quoted = false;
@@ -164,17 +203,51 @@ function parseHeaderParameters(header: string) {
   if (quoted || escaped) return undefined;
   segments.push(header.slice(segmentStart).trim());
 
+  const primaryValue = segments[0]?.toLowerCase();
+  if (
+    primaryValue === undefined ||
+    !/^[!#$%&'*+.^_`|~0-9a-z-]+(?:\/[!#$%&'*+.^_`|~0-9a-z-]+)?$/i.test(
+      primaryValue,
+    )
+  ) {
+    return undefined;
+  }
+
   const parameters = new Map<string, string>();
-  parameters.set("", segments[0]!.toLowerCase());
+  parameters.set("", primaryValue);
   for (const segment of segments.slice(1)) {
     const equals = segment.indexOf("=");
     if (equals <= 0) return undefined;
     const name = segment.slice(0, equals).trim().toLowerCase();
     let value = segment.slice(equals + 1).trim();
+    if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name)) return undefined;
     if (value.startsWith('"')) {
       if (!value.endsWith('"') || value.length < 2) return undefined;
-      value = value.slice(1, -1).replace(/\\(.)/g, "$1");
-    } else if (value.includes('"')) {
+      const quoted = value.slice(1, -1);
+      let decoded = "";
+      for (let index = 0; index < quoted.length; index++) {
+        const char = quoted[index]!;
+        if (char === "\\") {
+          index++;
+          const escaped = quoted[index];
+          if (
+            escaped === undefined ||
+            /[\u0000-\u0008\u000a-\u001f\u007f]/.test(escaped)
+          ) {
+            return undefined;
+          }
+          decoded += escaped;
+        } else if (
+          char === '"' ||
+          /[\u0000-\u0008\u000a-\u001f\u007f]/.test(char)
+        ) {
+          return undefined;
+        } else {
+          decoded += char;
+        }
+      }
+      value = decoded;
+    } else if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(value)) {
       return undefined;
     }
     if (parameters.has(name)) return undefined;
