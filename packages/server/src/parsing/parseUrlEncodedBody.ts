@@ -1,3 +1,5 @@
+// noinspection ExceptionCaughtLocallyJS
+
 import { HttpError } from "../HttpError.js";
 import { HttpStatusCode } from "../HttpStatusCode.js";
 
