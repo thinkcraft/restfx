@@ -32,6 +32,8 @@ export type {
 } from "./parsing/parseMultipartBody.js";
 export { HttpResource } from "./decorators/HttpResource.js";
 export { HttpMiddleware } from "./decorators/HttpMiddleware.js";
+export { CorsMiddleware } from "./decorators/CorsMiddleware.js";
+export type { CorsMiddlewareOptions } from "./decorators/CorsMiddleware.js";
 export { OpenApiMiddleware } from "./decorators/OpenApiMiddleware.js";
 export {
   Body,

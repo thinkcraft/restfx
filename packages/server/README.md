@@ -208,6 +208,41 @@ or modify the request/response, await the next handler, or return early to
 short-circuit the request. Ancestor middleware runs before middleware attached
 to a child resource.
 
+Use `@CorsMiddleware(options)` on the root resource to add CORS headers for
+matching request origins and handle preflight requests:
+
+```ts
+import { CorsMiddleware, HttpResource } from "@framework/server";
+
+@CorsMiddleware({
+  origins: ["https://app.example.com", "*.preview.example.com"],
+  credentials: true,
+  allowedHeaders: ["content-type", "authorization"],
+  exposedHeaders: ["x-total-count"],
+  maxAge: 600,
+})
+@HttpResource()
+class ApiResource {
+  // Routes...
+}
+```
+
+`origins` accepts exact HTTP(S) origins or domain patterns. A host-only pattern
+such as `*.preview.example.com` matches subdomains at any depth, but not the
+apex domain; it allows either HTTP or HTTPS and any port. Use a scheme-qualified
+pattern such as `https://*.preview.example.com` to restrict the scheme, and
+include a port to restrict that too. Matching origins are echoed in
+`Access-Control-Allow-Origin` rather than returning `*`, so credentials can be
+used safely with an explicit allowlist. Non-matching origins receive no CORS
+allow headers.
+
+Preflight methods default to the methods registered on the resource (including
+implicit `HEAD` and `OPTIONS`). `methods` can override that list. If
+`allowedHeaders` is omitted, requested preflight headers are reflected;
+otherwise only configured headers are accepted. `credentials`, `exposedHeaders`,
+and `maxAge` are optional. The middleware adds the appropriate `Vary` headers
+for origin and preflight request fields.
+
 ```ts
 import {
   HttpGet,
