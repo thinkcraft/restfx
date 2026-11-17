@@ -1,3 +1,5 @@
+export { AttachmentsResource } from "./AttachmentsResource.js";
+export { AuthResource } from "./AuthResource.js";
 export { ProjectResource } from "./ProjectResource.js";
 export { ProjectsResource } from "./ProjectsResource.js";
 export { TaskResource } from "./TaskResource.js";

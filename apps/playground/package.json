@@ -7,6 +7,7 @@
     "start": "node dist/index.js",
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty false",
+    "generate:client": "node --import tsx ./scripts/generate-client.ts && pnpm exec prettier --write src/api-client.ts",
     "test": "pnpm --filter @framework/server build && pnpm --filter @framework/client build && node --import tsx --test ./test"
   },
   "dependencies": {

@@ -318,6 +318,18 @@ function generateOperation(
   let inputType = "";
   if (requestModel) {
     inputType = requestModel;
+    if (requestBody && !bodyModel) {
+      inputType += ` & ${createInputType(
+        [],
+        requestBody,
+        requestContentType,
+        undefined,
+        requestSchema,
+        schemas,
+        modelAliases,
+        imports,
+      )}`;
+    }
   } else if (hasInput) {
     inputType = createInputType(
       parameters,

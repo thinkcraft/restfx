@@ -3,12 +3,16 @@ import { validateModel } from "@framework/core";
 import { createClient } from "@framework/client";
 import type { ClientOptions } from "@framework/client";
 import {
+  AttachmentPathRequest,
+  AuthSessionResponse,
   CreateProjectBody,
   CreateProjectRequest,
   CreateTaskBody,
   CreateTaskRequest,
   ListProjectsRequest,
+  ListProjectsResponse,
   ListTasksRequest,
+  LoginRequest,
   ProjectPathRequest,
   ProjectResponse,
   TaskPathRequest,
@@ -17,6 +21,7 @@ import {
   UpdateProjectRequest,
   UpdateTaskBody,
   UpdateTaskRequest,
+  WorkspaceResponse,
 } from "./models/index.js";
 
 export class ApiError extends Error {
@@ -45,7 +50,7 @@ export function createApiClient(options: ClientOptions = {}) {
       if (!response.ok) {
         let errorBody: unknown;
         try {
-          errorBody = await response.json();
+          errorBody = await readResponseBody(response);
         } catch {
           errorBody = undefined;
         }
@@ -67,7 +72,7 @@ export function createApiClient(options: ClientOptions = {}) {
         if (!response.ok) {
           let errorBody: unknown;
           try {
-            errorBody = await response.json();
+            errorBody = await readResponseBody(response);
           } catch {
             errorBody = undefined;
           }
@@ -77,14 +82,7 @@ export function createApiClient(options: ClientOptions = {}) {
       },
     },
     workspaces: {
-      list: async (): Promise<
-        {
-          id: string;
-          name: string;
-          plan: "free" | "team" | "enterprise";
-          region: string;
-        }[]
-      > => {
+      list: async (): Promise<WorkspaceResponse[]> => {
         const url = new URL(
           `/workspaces`,
           options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
@@ -97,18 +95,16 @@ export function createApiClient(options: ClientOptions = {}) {
         if (!response.ok) {
           let errorBody: unknown;
           try {
-            errorBody = await response.json();
+            errorBody = await readResponseBody(response);
           } catch {
             errorBody = undefined;
           }
           throw new ApiError(response.status, errorBody);
         }
-        return (await response.json()) as {
-          id: string;
-          name: string;
-          plan: "free" | "team" | "enterprise";
-          region: string;
-        }[];
+        return (await readResponseBody(
+          response,
+          "application/json",
+        )) as WorkspaceResponse[];
       },
       get: async (input: { path: { workspaceId: string } }): Promise<void> => {
         const url = new URL(
@@ -123,7 +119,7 @@ export function createApiClient(options: ClientOptions = {}) {
         if (!response.ok) {
           let errorBody: unknown;
           try {
-            errorBody = await response.json();
+            errorBody = await readResponseBody(response);
           } catch {
             errorBody = undefined;
           }
@@ -134,11 +130,7 @@ export function createApiClient(options: ClientOptions = {}) {
       projects: {
         list: async (
           input: ListProjectsRequest,
-        ): Promise<{
-          items: ProjectResponse[];
-          total: number;
-          limit: number;
-        }> => {
+        ): Promise<ListProjectsResponse> => {
           const requestInput: Record<string, unknown> = {};
           if (
             Object.hasOwn(input, "workspaceId") &&
@@ -172,17 +164,16 @@ export function createApiClient(options: ClientOptions = {}) {
           if (!response.ok) {
             let errorBody: unknown;
             try {
-              errorBody = await response.json();
+              errorBody = await readResponseBody(response);
             } catch {
               errorBody = undefined;
             }
             throw new ApiError(response.status, errorBody);
           }
-          return (await response.json()) as {
-            items: ProjectResponse[];
-            total: number;
-            limit: number;
-          };
+          return (await readResponseBody(
+            response,
+            "application/json",
+          )) as ListProjectsResponse;
         },
         create: async (
           input: CreateProjectRequest,
@@ -230,13 +221,16 @@ export function createApiClient(options: ClientOptions = {}) {
           if (!response.ok) {
             let errorBody: unknown;
             try {
-              errorBody = await response.json();
+              errorBody = await readResponseBody(response);
             } catch {
               errorBody = undefined;
             }
             throw new ApiError(response.status, errorBody);
           }
-          return (await response.json()) as ProjectResponse;
+          return (await readResponseBody(
+            response,
+            "application/json",
+          )) as ProjectResponse;
         },
         get: async (input: ProjectPathRequest): Promise<ProjectResponse> => {
           const requestInput: Record<string, unknown> = {};
@@ -265,13 +259,16 @@ export function createApiClient(options: ClientOptions = {}) {
           if (!response.ok) {
             let errorBody: unknown;
             try {
-              errorBody = await response.json();
+              errorBody = await readResponseBody(response);
             } catch {
               errorBody = undefined;
             }
             throw new ApiError(response.status, errorBody);
           }
-          return (await response.json()) as ProjectResponse;
+          return (await readResponseBody(
+            response,
+            "application/json",
+          )) as ProjectResponse;
         },
         update: async (
           input: UpdateProjectRequest,
@@ -313,13 +310,16 @@ export function createApiClient(options: ClientOptions = {}) {
           if (!response.ok) {
             let errorBody: unknown;
             try {
-              errorBody = await response.json();
+              errorBody = await readResponseBody(response);
             } catch {
               errorBody = undefined;
             }
             throw new ApiError(response.status, errorBody);
           }
-          return (await response.json()) as ProjectResponse;
+          return (await readResponseBody(
+            response,
+            "application/json",
+          )) as ProjectResponse;
         },
         archive: async (input: ProjectPathRequest): Promise<void> => {
           const requestInput: Record<string, unknown> = {};
@@ -348,7 +348,7 @@ export function createApiClient(options: ClientOptions = {}) {
           if (!response.ok) {
             let errorBody: unknown;
             try {
-              errorBody = await response.json();
+              errorBody = await readResponseBody(response);
             } catch {
               errorBody = undefined;
             }
@@ -390,13 +390,16 @@ export function createApiClient(options: ClientOptions = {}) {
             if (!response.ok) {
               let errorBody: unknown;
               try {
-                errorBody = await response.json();
+                errorBody = await readResponseBody(response);
               } catch {
                 errorBody = undefined;
               }
               throw new ApiError(response.status, errorBody);
             }
-            return (await response.json()) as TaskResponse[];
+            return (await readResponseBody(
+              response,
+              "application/json",
+            )) as TaskResponse[];
           },
           create: async (input: CreateTaskRequest): Promise<TaskResponse> => {
             const requestInput: Record<string, unknown> = {};
@@ -447,13 +450,16 @@ export function createApiClient(options: ClientOptions = {}) {
             if (!response.ok) {
               let errorBody: unknown;
               try {
-                errorBody = await response.json();
+                errorBody = await readResponseBody(response);
               } catch {
                 errorBody = undefined;
               }
               throw new ApiError(response.status, errorBody);
             }
-            return (await response.json()) as TaskResponse;
+            return (await readResponseBody(
+              response,
+              "application/json",
+            )) as TaskResponse;
           },
           get: async (input: TaskPathRequest): Promise<TaskResponse> => {
             const requestInput: Record<string, unknown> = {};
@@ -484,13 +490,16 @@ export function createApiClient(options: ClientOptions = {}) {
             if (!response.ok) {
               let errorBody: unknown;
               try {
-                errorBody = await response.json();
+                errorBody = await readResponseBody(response);
               } catch {
                 errorBody = undefined;
               }
               throw new ApiError(response.status, errorBody);
             }
-            return (await response.json()) as TaskResponse;
+            return (await readResponseBody(
+              response,
+              "application/json",
+            )) as TaskResponse;
           },
           update: async (input: UpdateTaskRequest): Promise<TaskResponse> => {
             const requestInput: Record<string, unknown> = {};
@@ -532,15 +541,182 @@ export function createApiClient(options: ClientOptions = {}) {
             if (!response.ok) {
               let errorBody: unknown;
               try {
-                errorBody = await response.json();
+                errorBody = await readResponseBody(response);
               } catch {
                 errorBody = undefined;
               }
               throw new ApiError(response.status, errorBody);
             }
-            return (await response.json()) as TaskResponse;
+            return (await readResponseBody(
+              response,
+              "application/json",
+            )) as TaskResponse;
           },
         },
+      },
+    },
+    auth: {
+      session: {
+        create: async (input: {
+          body: LoginRequest;
+        }): Promise<AuthSessionResponse> => {
+          const serializedBodyInput = JSON.stringify(input.body);
+          const bodyInput =
+            serializedBodyInput === undefined
+              ? undefined
+              : JSON.parse(serializedBodyInput);
+          const body = validateModel(bodyInput, LoginRequest);
+          const url = new URL(
+            `/auth/session`,
+            options.baseUrl ??
+              globalThis.location?.origin ??
+              "http://localhost",
+          );
+          const headers = new Headers(options.headers);
+          headers.set("content-type", "application/json");
+          const response = await client.request(url.toString(), {
+            method: "POST",
+            headers,
+            body: JSON.stringify(body),
+          });
+          if (!response.ok) {
+            let errorBody: unknown;
+            try {
+              errorBody = await readResponseBody(response);
+            } catch {
+              errorBody = undefined;
+            }
+            throw new ApiError(response.status, errorBody);
+          }
+          return (await readResponseBody(
+            response,
+            "application/json",
+          )) as AuthSessionResponse;
+        },
+        get: async (): Promise<AuthSessionResponse> => {
+          const url = new URL(
+            `/auth/session`,
+            options.baseUrl ??
+              globalThis.location?.origin ??
+              "http://localhost",
+          );
+          const headers = new Headers(options.headers);
+          const response = await client.request(url.toString(), {
+            method: "GET",
+            headers,
+          });
+          if (!response.ok) {
+            let errorBody: unknown;
+            try {
+              errorBody = await readResponseBody(response);
+            } catch {
+              errorBody = undefined;
+            }
+            throw new ApiError(response.status, errorBody);
+          }
+          return (await readResponseBody(
+            response,
+            "application/json",
+          )) as AuthSessionResponse;
+        },
+        delete: async (): Promise<void> => {
+          const url = new URL(
+            `/auth/session`,
+            options.baseUrl ??
+              globalThis.location?.origin ??
+              "http://localhost",
+          );
+          const headers = new Headers(options.headers);
+          const response = await client.request(url.toString(), {
+            method: "DELETE",
+            headers,
+          });
+          if (!response.ok) {
+            let errorBody: unknown;
+            try {
+              errorBody = await readResponseBody(response);
+            } catch {
+              errorBody = undefined;
+            }
+            throw new ApiError(response.status, errorBody);
+          }
+          return undefined;
+        },
+      },
+    },
+    attachments: {
+      update: async (
+        input: AttachmentPathRequest & {
+          body: Blob | ArrayBuffer | ArrayBufferView;
+        },
+      ): Promise<{
+        id: string;
+        bytes: number;
+        contentType: "application/octet-stream";
+      }> => {
+        const requestInput: Record<string, unknown> = {};
+        if (
+          Object.hasOwn(input, "attachmentId") &&
+          input["attachmentId"] !== undefined
+        )
+          requestInput["attachmentId"] = input["attachmentId"];
+        const request = validateModel(requestInput, AttachmentPathRequest);
+        const url = new URL(
+          `/attachments/${encodeURIComponent(String(request["attachmentId"]))}`,
+          options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
+        );
+        const headers = new Headers(options.headers);
+        headers.set("content-type", "application/octet-stream");
+        const response = await client.request(url.toString(), {
+          method: "PUT",
+          headers,
+          body: input.body as BodyInit,
+        });
+        if (!response.ok) {
+          let errorBody: unknown;
+          try {
+            errorBody = await readResponseBody(response);
+          } catch {
+            errorBody = undefined;
+          }
+          throw new ApiError(response.status, errorBody);
+        }
+        return (await readResponseBody(response, "application/json")) as {
+          id: string;
+          bytes: number;
+          contentType: "application/octet-stream";
+        };
+      },
+      get: async (input: AttachmentPathRequest): Promise<Blob> => {
+        const requestInput: Record<string, unknown> = {};
+        if (
+          Object.hasOwn(input, "attachmentId") &&
+          input["attachmentId"] !== undefined
+        )
+          requestInput["attachmentId"] = input["attachmentId"];
+        const request = validateModel(requestInput, AttachmentPathRequest);
+        const url = new URL(
+          `/attachments/${encodeURIComponent(String(request["attachmentId"]))}`,
+          options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
+        );
+        const headers = new Headers(options.headers);
+        const response = await client.request(url.toString(), {
+          method: "GET",
+          headers,
+        });
+        if (!response.ok) {
+          let errorBody: unknown;
+          try {
+            errorBody = await readResponseBody(response);
+          } catch {
+            errorBody = undefined;
+          }
+          throw new ApiError(response.status, errorBody);
+        }
+        return (await readResponseBody(
+          response,
+          "application/octet-stream",
+        )) as Blob;
       },
     },
   };
@@ -557,4 +733,81 @@ function appendQuery(
   } else {
     searchParams.append(name, String(value));
   }
+}
+
+function toFormData(value: unknown): FormData {
+  if (value instanceof FormData) return value;
+  if (!value || typeof value !== "object") {
+    throw new TypeError(
+      "multipart/form-data body must be an object or FormData",
+    );
+  }
+  const form = new FormData();
+  for (const [name, raw] of Object.entries(value)) {
+    const values = Array.isArray(raw) ? raw : [raw];
+    for (const item of values) {
+      if (item === undefined || item === null) continue;
+      if (item instanceof Blob) {
+        form.append(name, item);
+      } else if (typeof item === "object") {
+        form.append(name, JSON.stringify(item));
+      } else {
+        form.append(name, String(item));
+      }
+    }
+  }
+  return form;
+}
+
+function toUrlSearchParams(value: unknown): URLSearchParams {
+  if (value instanceof URLSearchParams) return value;
+  if (!value || typeof value !== "object") {
+    throw new TypeError(
+      "URL-encoded body must be an object or URLSearchParams",
+    );
+  }
+  const params = new URLSearchParams();
+  for (const [name, raw] of Object.entries(value)) {
+    const values = Array.isArray(raw) ? raw : [raw];
+    for (const item of values) {
+      if (item === undefined || item === null) continue;
+      params.append(
+        name,
+        typeof item === "object" ? JSON.stringify(item) : String(item),
+      );
+    }
+  }
+  return params;
+}
+
+async function readResponseBody(
+  response: Response,
+  fallbackContentType = "",
+): Promise<unknown> {
+  if (!response.body) return undefined;
+  const contentType = (
+    response.headers.get("content-type") ?? fallbackContentType
+  )
+    .split(";")[0]!
+    .trim()
+    .toLowerCase();
+  if (contentType === "application/json" || contentType.endsWith("+json")) {
+    return await response.json();
+  }
+  if (
+    contentType.startsWith("text/") ||
+    contentType === "application/xml" ||
+    contentType.endsWith("+xml") ||
+    contentType === "application/javascript" ||
+    contentType === "application/ecmascript"
+  ) {
+    return await response.text();
+  }
+  if (contentType === "application/x-www-form-urlencoded") {
+    return new URLSearchParams(await response.text());
+  }
+  if (contentType.startsWith("multipart/form-data")) {
+    return await response.formData();
+  }
+  return await response.blob();
 }

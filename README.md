@@ -53,6 +53,31 @@ bodies, query filters, and CRUD-style operations. Its seeded workspace ID is
 curl "http://localhost:3000/workspaces/550e8400-e29b-41d4-a716-446655440000/projects?status=active&limit=10"
 ```
 
+The playground also includes a demo cookie session and binary attachment API.
+The demo credentials are `demo@example.test` / `playground-only`; they are
+hard-coded examples, not production authentication. Successful login returns
+an HttpOnly session cookie, which you can reuse for the current-session and
+logout endpoints:
+
+```sh
+curl -i -c cookies.txt -H 'content-type: application/json' \
+  -d '{"email":"demo@example.test","password":"playground-only"}' \
+  http://localhost:3000/auth/session
+curl -b cookies.txt http://localhost:3000/auth/session
+curl -i -b cookies.txt -X DELETE http://localhost:3000/auth/session
+```
+
+Upload and download one raw binary attachment at a time. This example keeps
+attachments in memory and limits uploads to 5 MiB; use streaming and durable
+storage for larger or production uploads:
+
+```sh
+curl -X PUT -H 'content-type: application/octet-stream' \
+  --data-binary @./attachment.bin \
+  http://localhost:3000/attachments/example-file
+curl -o downloaded.bin http://localhost:3000/attachments/example-file
+```
+
 The playground includes an end-to-end test that runs its generated client
 against the in-process HTTP server and checks the OpenAPI document, successful
 operations, duplicate conflicts, and request validation. `pnpm test` runs this

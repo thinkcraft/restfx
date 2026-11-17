@@ -34,6 +34,37 @@ describe("playground end-to-end API", () => {
       assert.ok(openApi.components?.schemas?.WorkspaceResponse);
       assert.ok(openApi.components?.schemas?.TaskResponse);
       assert.ok(openApi.components?.schemas?.ListProjectsResponse);
+      assert.ok(openApi.components?.schemas?.LoginRequest);
+      assert.ok(openApi.components?.schemas?.AuthSessionResponse);
+      assert.ok(openApi.paths["/auth/session"]?.post);
+      assert.ok(openApi.paths["/auth/session"]?.get);
+      assert.ok(openApi.paths["/auth/session"]?.delete);
+      assert.deepEqual(
+        (
+          openApi.paths["/auth/session"]?.post as {
+            responses: Record<
+              string,
+              { headers?: Record<string, { description?: string }> }
+            >;
+          }
+        ).responses["200"]?.headers?.["Set-Cookie"],
+        {
+          description: "HttpOnly northstar_session cookie for the demo session",
+          schema: { type: "string" },
+        },
+      );
+      assert.ok(openApi.paths["/attachments/{attachmentId}"]?.put);
+      assert.ok(openApi.paths["/attachments/{attachmentId}"]?.get);
+      assert.deepEqual(
+        (
+          openApi.paths["/attachments/{attachmentId}"]?.put as {
+            requestBody: {
+              content: Record<string, { schema: unknown }>;
+            };
+          }
+        ).requestBody.content["application/octet-stream"]?.schema,
+        { type: "string", format: "binary" },
+      );
       assert.deepEqual(
         (
           openApi.paths["/workspaces"]?.get as {
@@ -144,6 +175,103 @@ describe("playground end-to-end API", () => {
         }),
         (error: unknown) => error instanceof ApiError && error.status === 409,
       );
+
+      const invalidLogin = await fetch(`${baseUrl}/auth/session`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "demo@example.test",
+          password: "incorrect",
+        }),
+      });
+      assert.equal(invalidLogin.status, 401);
+      assert.equal(invalidLogin.headers.get("set-cookie"), null);
+
+      const login = await fetch(`${baseUrl}/auth/session`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "demo@example.test",
+          password: "playground-only",
+        }),
+      });
+      assert.equal(login.status, 200);
+      assert.deepEqual(await login.json(), {
+        userId: "demo-user",
+        email: "demo@example.test",
+      });
+      const setCookie = login.headers.get("set-cookie");
+      assert.ok(setCookie);
+      assert.match(setCookie, /HttpOnly/i);
+      assert.match(setCookie, /SameSite=Lax/i);
+      assert.match(setCookie, /Path=\//i);
+      const sessionCookie = setCookie.split(";", 1)[0];
+      assert.ok(sessionCookie);
+
+      const currentSession = await fetch(`${baseUrl}/auth/session`, {
+        headers: { cookie: sessionCookie },
+      });
+      assert.equal(currentSession.status, 200);
+      assert.deepEqual(await currentSession.json(), {
+        userId: "demo-user",
+        email: "demo@example.test",
+      });
+
+      const logout = await fetch(`${baseUrl}/auth/session`, {
+        method: "DELETE",
+        headers: { cookie: sessionCookie },
+      });
+      assert.equal(logout.status, 204);
+      assert.match(logout.headers.get("set-cookie") ?? "", /Max-Age=0/i);
+      const expiredSession = await fetch(`${baseUrl}/auth/session`, {
+        headers: { cookie: sessionCookie },
+      });
+      assert.equal(expiredSession.status, 401);
+
+      const attachmentId = `e2e-${randomUUID()}`;
+      const attachmentBytes = Buffer.from([0x00, 0xff, 0x80, 0x41, 0x00]);
+      const upload = await fetch(`${baseUrl}/attachments/${attachmentId}`, {
+        method: "PUT",
+        headers: { "content-type": "application/octet-stream" },
+        body: attachmentBytes,
+      });
+      assert.equal(upload.status, 201);
+      assert.deepEqual(await upload.json(), {
+        id: attachmentId,
+        bytes: attachmentBytes.byteLength,
+        contentType: "application/octet-stream",
+      });
+
+      const download = await fetch(`${baseUrl}/attachments/${attachmentId}`);
+      assert.equal(download.status, 200);
+      assert.equal(
+        download.headers.get("content-type"),
+        "application/octet-stream",
+      );
+      assert.deepEqual(
+        Buffer.from(await download.arrayBuffer()),
+        attachmentBytes,
+      );
+
+      const missingAttachment = await fetch(
+        `${baseUrl}/attachments/not-uploaded`,
+      );
+      assert.equal(missingAttachment.status, 404);
+
+      const oversizedAttachmentId = `e2e-large-${randomUUID()}`;
+      const oversizedUpload = await fetch(
+        `${baseUrl}/attachments/${oversizedAttachmentId}`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/octet-stream" },
+          body: Buffer.alloc(5 * 1024 * 1024 + 1),
+        },
+      );
+      assert.equal(oversizedUpload.status, 413);
+      const rejectedAttachment = await fetch(
+        `${baseUrl}/attachments/${oversizedAttachmentId}`,
+      );
+      assert.equal(rejectedAttachment.status, 404);
     } finally {
       await server.close();
     }

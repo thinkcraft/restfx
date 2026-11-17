@@ -192,6 +192,58 @@ describe("API client generator", () => {
     );
   });
 
+  it("adds binary request bodies to request-model client inputs", () => {
+    const document = {
+      openapi: "3.1.0",
+      info: { title: "Binary request model", version: "1" },
+      paths: {
+        "/uploads/{id}": {
+          put: {
+            operationId: "uploadFile",
+            parameters: [
+              {
+                name: "id",
+                in: "path",
+                required: true,
+                schema: { type: "string" },
+              },
+            ],
+            requestBody: {
+              required: true,
+              content: {
+                "application/octet-stream": {
+                  schema: { type: "string", format: "binary" },
+                },
+              },
+            },
+            responses: { "204": { description: "Uploaded" } },
+            "x-framework-client": {
+              requestModel: { $ref: "#/components/schemas/UploadRequest" },
+              fields: [{ property: "id", source: "path", name: "id" }],
+            },
+          },
+        },
+      },
+      components: {
+        schemas: {
+          UploadRequest: {
+            "x-framework-model": "UploadRequest",
+            type: "object",
+            properties: { id: { type: "string" } },
+          },
+        },
+      },
+    };
+
+    const generated = generateClient(document, { models: "./models.js" });
+
+    assert.match(
+      generated,
+      /input: UploadRequest & \{ body: Blob \| ArrayBuffer \| ArrayBufferView \}/,
+    );
+    assert.match(generated, /body: \(input\.body as BodyInit\)/);
+  });
+
   it("serializes form and binary requests and decodes non-JSON responses", async () => {
     const document = {
       openapi: "3.1.0",
