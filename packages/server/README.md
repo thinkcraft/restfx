@@ -53,3 +53,10 @@ HTTP method decorators accept an optional route path, including `:name`
 parameters, which are available through `ctx.req.params`. Handler return values
 are sent as text for strings and JSON for other values. Return `HttpResult` to
 set the status, body, and headers explicitly.
+
+Request bodies can be parsed with `ctx.req.parseBody<T>()`. The parser supports
+JSON, URL-encoded forms, binary payloads, and `multipart/form-data`. Multipart
+fields are returned as strings; uploaded files are returned as
+`{ filename, contentType, data }`, with `data` as a `Buffer`. Repeated field
+names are returned as arrays of values. The default request-body limit is 1 MiB;
+pass a byte limit to `parseBody(maxBytes)` to override it.

@@ -185,7 +185,7 @@ describe("HttpServer resource decorators", () => {
     assert.equal(response.status, 415);
     assert.deepEqual(await response.json(), {
       message:
-        "Content-Type must be application/json, application/x-www-form-urlencoded, or application/octet-stream",
+        "Content-Type must be application/json, application/x-www-form-urlencoded, application/octet-stream, or multipart/form-data",
     });
   });
 

@@ -78,6 +78,77 @@ describe("HttpBodyParser", () => {
     assert.deepEqual(await parser.parse<Buffer>(request), body);
   });
 
+  it("parses multipart fields, repeated names, and binary file data", async () => {
+    const boundary = "----test-boundary";
+    const fileData = Buffer.from([0x00, 0xff, 0x80, 0x0d, 0x0a]);
+    const body = Buffer.concat([
+      Buffer.from(`Preamble mentions --${boundary} but is not a delimiter\r\n`),
+      Buffer.from(
+        `--${boundary}\r\n` +
+          'Content-Disposition: form-data; name="title"\r\n' +
+          "\r\n" +
+          "A multipart example\r\n" +
+          `--${boundary}\r\n` +
+          'Content-Disposition: form-data; name="tag"\r\n' +
+          "\r\n" +
+          "one\r\n" +
+          `--${boundary}\r\n` +
+          'Content-Disposition: form-data; name="tag"\r\n' +
+          "\r\n" +
+          "two\r\n" +
+          `--${boundary}\r\n` +
+          'Content-Disposition: form-data; name="upload"; filename="sample.bin"\r\n' +
+          "Content-Type: application/octet-stream\r\n" +
+          "\r\n",
+      ),
+      fileData,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    const request = createRequest(
+      [body.subarray(0, 57), body.subarray(57)],
+      body.byteLength,
+      `multipart/form-data; boundary="${boundary}"`,
+    );
+
+    assert.deepEqual(await parser.parse(request), {
+      title: "A multipart example",
+      tag: ["one", "two"],
+      upload: {
+        filename: "sample.bin",
+        contentType: "application/octet-stream",
+        data: fileData,
+      },
+    });
+  });
+
+  it("rejects multipart requests without a valid boundary or structure", async () => {
+    const missingBoundary = createRequest(
+      [Buffer.from("")],
+      undefined,
+      "multipart/form-data",
+    );
+    await assert.rejects(
+      () => parser.parse(missingBoundary),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest &&
+        error.message === "Invalid multipart/form-data boundary",
+    );
+
+    const malformed = createRequest(
+      [Buffer.from("--boundary\r\nnot a header\r\n\r\nvalue")],
+      undefined,
+      "multipart/form-data; boundary=boundary",
+    );
+    await assert.rejects(
+      () => parser.parse(malformed),
+      (error: unknown) =>
+        error instanceof HttpError &&
+        error.status === HttpStatusCode.BadRequest &&
+        error.message === "Invalid multipart/form-data request body",
+    );
+  });
+
   it("rejects missing and unsupported Content-Type headers", async () => {
     for (const contentType of [null, "text/plain"]) {
       const request = createRequest(
@@ -92,7 +163,7 @@ describe("HttpBodyParser", () => {
           error instanceof HttpError &&
           error.status === HttpStatusCode.UnsupportedMediaType &&
           error.message ===
-            "Content-Type must be application/json, application/x-www-form-urlencoded, or application/octet-stream",
+            "Content-Type must be application/json, application/x-www-form-urlencoded, application/octet-stream, or multipart/form-data",
       );
     }
   });

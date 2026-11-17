@@ -16,6 +16,11 @@ export { HttpStatusCode } from "./HttpStatusCode.js";
 export { HttpHeaderName } from "./HttpHeaderName.js";
 export { HttpMediaType } from "./HttpMediaType.js";
 export { HttpBodyParser } from "./parsing/HttpBodyParser.js";
+export type {
+  HttpMultipartData,
+  HttpMultipartFile,
+  HttpMultipartValue,
+} from "./parsing/parseMultipartBody.js";
 export { HttpResource } from "./decorators/HttpResource.js";
 export {
   HttpDelete,

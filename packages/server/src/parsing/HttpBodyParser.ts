@@ -3,6 +3,13 @@ import { HttpError } from "../HttpError.js";
 import { HttpHeaderName } from "../HttpHeaderName.js";
 import { HttpMediaType } from "../HttpMediaType.js";
 import { HttpStatusCode } from "../HttpStatusCode.js";
+import { parseBinaryBody } from "./parseBinaryBody.js";
+import {
+  getMultipartBoundary,
+  parseMultipartBody,
+} from "./parseMultipartBody.js";
+import { parseJsonBody } from "./parseJsonBody.js";
+import { parseUrlEncodedBody } from "./parseUrlEncodedBody.js";
 
 export class HttpBodyParser {
   async parse<T>(req: IncomingMessage, maxBytes = 1_048_576): Promise<T> {
@@ -17,7 +24,19 @@ export class HttpBodyParser {
       req.resume();
       throw new HttpError(
         HttpStatusCode.UnsupportedMediaType,
-        `Content-Type must be ${HttpMediaType.ApplicationJson}, ${HttpMediaType.ApplicationUrlEncoded}, or ${HttpMediaType.ApplicationOctetStream}`,
+        `Content-Type must be ${HttpMediaType.ApplicationJson}, ${HttpMediaType.ApplicationUrlEncoded}, ${HttpMediaType.ApplicationOctetStream}, or ${HttpMediaType.MultipartFormData}`,
+      );
+    }
+
+    const multipartBoundary =
+      bodyFormat === "multipart"
+        ? getMultipartBoundary(req.headers[HttpHeaderName.ContentType])
+        : undefined;
+    if (bodyFormat === "multipart" && multipartBoundary === undefined) {
+      req.resume();
+      throw new HttpError(
+        HttpStatusCode.BadRequest,
+        "Invalid multipart/form-data boundary",
       );
     }
 
@@ -49,24 +68,15 @@ export class HttpBodyParser {
       );
     }
 
-    if (bodyFormat === "urlencoded") {
-      return this.parseUrlEncoded<T>(body);
-    }
-
-    if (bodyFormat === "binary") {
-      return body as T;
-    }
-
-    try {
-      return JSON.parse(body.toString("utf8")) as T;
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        throw new HttpError(
-          HttpStatusCode.BadRequest,
-          "Invalid JSON request body",
-        );
-      }
-      throw error;
+    switch (bodyFormat) {
+      case "urlencoded":
+        return parseUrlEncodedBody<T>(body);
+      case "binary":
+        return parseBinaryBody<T>(body);
+      case "multipart":
+        return parseMultipartBody(body, multipartBoundary!) as T;
+      case "json":
+        return parseJsonBody<T>(body);
     }
   }
 
@@ -74,6 +84,7 @@ export class HttpBodyParser {
     const mediaType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
     if (mediaType === HttpMediaType.ApplicationUrlEncoded) return "urlencoded";
     if (mediaType === HttpMediaType.ApplicationOctetStream) return "binary";
+    if (mediaType === HttpMediaType.MultipartFormData) return "multipart";
     const applicationPrefix = HttpMediaType.ApplicationJson.split("/")[0] + "/";
     if (!mediaType?.startsWith(applicationPrefix)) return undefined;
 
@@ -86,21 +97,5 @@ export class HttpBodyParser {
     }
 
     return undefined;
-  }
-
-  private parseUrlEncoded<T>(body: Buffer): T {
-    const fields = new Map<string, string | string[]>();
-    for (const [key, value] of new URLSearchParams(body.toString("utf8"))) {
-      const existing = fields.get(key);
-      if (existing === undefined) {
-        fields.set(key, value);
-      } else if (Array.isArray(existing)) {
-        existing.push(value);
-      } else {
-        fields.set(key, [existing, value]);
-      }
-    }
-
-    return Object.fromEntries(fields) as T;
   }
 }
