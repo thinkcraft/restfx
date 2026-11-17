@@ -10,7 +10,7 @@ import {
   HttpResource,
   HttpResult,
   HttpServer,
-} from "../src/index.js";
+} from "../src";
 
 class PostsResource {
   @HttpGet()

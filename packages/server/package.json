@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "test": "node --import tsx --test ./test",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {

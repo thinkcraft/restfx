@@ -14,7 +14,7 @@
     "dev": "pnpm --filter @framework/playground dev",
     "typecheck": "tsc -b --pretty false",
     "start": "tsx packages/server/src",
-    "test": "node --import tsx --test packages/server/test/HttpServer.test.ts"
+    "test": "pnpm --filter @framework/* test"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
