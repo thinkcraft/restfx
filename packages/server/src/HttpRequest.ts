@@ -8,6 +8,7 @@ export class HttpRequest {
 
   readonly method: string;
   readonly url: URL;
+  readonly path: string;
   params: Record<string, string> = {};
 
   get headers() {
@@ -27,6 +28,7 @@ export class HttpRequest {
 
     this.method = this.req.method?.toUpperCase() ?? "GET";
     this.url = new URL(req.url!, `${proto}://${host}`);
+    this.path = this.url.pathname;
   }
 
   async parseBody<T>(maxBytes = 1_048_576): Promise<T> {

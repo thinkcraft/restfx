@@ -6,6 +6,7 @@ import {
   HttpContext,
   HttpDelete,
   HttpGet,
+  HttpMiddleware,
   HttpPost,
   HttpResource,
   HttpResult,
@@ -79,6 +80,62 @@ class TestApi {
 
   @HttpResource()
   readonly users = new UsersResource();
+}
+
+const middlewareTrace: string[] = [];
+
+async function rootMiddleware(
+  context: HttpContext,
+  next: () => Promise<unknown>,
+) {
+  middlewareTrace.push("root:before");
+  context.res.setHeader("x-root-middleware", "ran");
+  const result = await next();
+  middlewareTrace.push("root:after");
+  return result;
+}
+
+async function sharedResourceMiddleware(
+  context: HttpContext,
+  next: () => Promise<unknown>,
+) {
+  middlewareTrace.push("resource:before");
+  if (context.req.path.endsWith("/blocked")) {
+    middlewareTrace.push("resource:blocked");
+    return new HttpResult(403, { message: "Blocked by middleware" });
+  }
+
+  const result = await next();
+  middlewareTrace.push("resource:after");
+  return result;
+}
+
+@HttpMiddleware(sharedResourceMiddleware)
+class MiddlewareItemsResource {
+  @HttpGet(":id")
+  get(context: HttpContext) {
+    middlewareTrace.push("handler");
+    return { id: context.req.params.id, path: context.req.path };
+  }
+}
+
+@HttpMiddleware(sharedResourceMiddleware)
+class OtherMiddlewareResource {
+  @HttpGet()
+  get() {
+    middlewareTrace.push("other:handler");
+    return { ok: true };
+  }
+}
+
+@HttpMiddleware(rootMiddleware)
+@HttpResource("middleware")
+class MiddlewareApi {
+  @HttpResource("items")
+  readonly items = new MiddlewareItemsResource();
+
+  @HttpResource("other")
+  readonly other = new OtherMiddlewareResource();
 }
 
 describe("HttpServer resource decorators", () => {
@@ -234,5 +291,71 @@ describe("HttpServer resource decorators", () => {
     const response = await fetch(`${baseUrl}/missing`);
 
     assert.equal(response.status, 404);
+  });
+});
+
+describe("HttpMiddleware decorator", () => {
+  const server = new HttpServer(MiddlewareApi);
+  let baseUrl: string;
+
+  before(async () => {
+    const listeningServer = server.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${address.port}`;
+  });
+
+  after(async () => {
+    await server.close();
+  });
+
+  it("runs ancestor and resource middleware around the route handler", async () => {
+    middlewareTrace.length = 0;
+    const response = await fetch(`${baseUrl}/middleware/items/42?view=full`);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-root-middleware"), "ran");
+    assert.deepEqual(await response.json(), {
+      id: "42",
+      path: "/middleware/items/42",
+    });
+    assert.deepEqual(middlewareTrace, [
+      "root:before",
+      "resource:before",
+      "handler",
+      "resource:after",
+      "root:after",
+    ]);
+  });
+
+  it("allows middleware to short-circuit a request", async () => {
+    middlewareTrace.length = 0;
+    const response = await fetch(`${baseUrl}/middleware/items/blocked`);
+
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), {
+      message: "Blocked by middleware",
+    });
+    assert.deepEqual(middlewareTrace, [
+      "root:before",
+      "resource:before",
+      "resource:blocked",
+      "root:after",
+    ]);
+  });
+
+  it("reuses the same middleware function on different resources", async () => {
+    middlewareTrace.length = 0;
+    const response = await fetch(`${baseUrl}/middleware/other`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true });
+    assert.deepEqual(middlewareTrace, [
+      "root:before",
+      "resource:before",
+      "other:handler",
+      "resource:after",
+      "root:after",
+    ]);
   });
 });

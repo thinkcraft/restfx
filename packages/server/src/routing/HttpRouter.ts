@@ -1,5 +1,9 @@
 import type { HttpContext } from "../HttpContext.js";
-import { getResourceMetadata } from "../metadata/ResourceMetadata.js";
+import {
+  getResourceMiddlewares,
+  getResourceMetadata,
+  type HttpMiddlewareHandler,
+} from "../metadata/ResourceMetadata.js";
 import { Route } from "./Route.js";
 import { HttpRouterResult } from "./HttpRouterResult.js";
 import { ResourceConstructor } from "../types/ResourceConstructor.js";
@@ -23,7 +27,7 @@ export class HttpRouter {
   }
 
   async dispatch(context: HttpContext): Promise<HttpRouterResult> {
-    const path = context.req.url.pathname;
+    const path = context.req.path;
     const method = context.req.method;
     const matches = this._routes
       .match(path)
@@ -51,7 +55,32 @@ export class HttpRouter {
     }
 
     context.req.params = match.params;
-    const value = await match.route.handler.call(match.route.resource, context);
+    const invokeHandler = () =>
+      Promise.resolve(match.route.handler.call(match.route.resource, context));
+    const invokeMiddleware = async (index: number): Promise<unknown> => {
+      const middleware = match.route.middlewares[index];
+      if (!middleware) return invokeHandler();
+
+      let downstream: Promise<unknown> | undefined;
+      const next = () => {
+        if (downstream) {
+          throw new Error("HTTP middleware called next() more than once");
+        }
+        downstream = invokeMiddleware(index + 1);
+        return downstream;
+      };
+      const value = await (middleware.handler as HttpMiddlewareHandler).call(
+        middleware.resource,
+        context,
+        next,
+      );
+
+      if (!downstream) return value;
+      const downstreamValue = await downstream;
+      return value === undefined ? downstreamValue : value;
+    };
+
+    const value = await invokeMiddleware(0);
     return { matched: true, value };
   }
 
@@ -59,7 +88,11 @@ export class HttpRouter {
     const routes: Route[] = [];
     const ancestors = new Set<object>();
 
-    const visit = (resource: object, mountedPath: string) => {
+    const visit = (
+      resource: object,
+      mountedPath: string,
+      inheritedMiddlewares: Route["middlewares"],
+    ) => {
       if (ancestors.has(resource)) {
         throw new TypeError("A resource cannot contain itself recursively");
       }
@@ -68,6 +101,13 @@ export class HttpRouter {
       const constructor = resource.constructor;
       const metadata = getResourceMetadata(constructor);
       const basePath = mountedPath || normalizePath(metadata?.path ?? "");
+      const middlewares = [
+        ...inheritedMiddlewares,
+        ...getResourceMiddlewares(constructor).map((handler) => ({
+          resource,
+          handler,
+        })),
+      ];
 
       for (const [handler, handlerMetadata] of getResourceHandlers(resource)) {
         const path = joinPaths(basePath, handlerMetadata.path);
@@ -77,6 +117,7 @@ export class HttpRouter {
           specificity: getPathSpecificity(path),
           resource,
           handler,
+          middlewares,
         });
       }
 
@@ -100,13 +141,13 @@ export class HttpRouter {
           childResource.constructor,
         )?.path;
         const childPath = child.path ?? childClassPath ?? String(child.key);
-        visit(childResource, joinPaths(basePath, childPath));
+        visit(childResource, joinPaths(basePath, childPath), middlewares);
       }
 
       ancestors.delete(resource);
     };
 
-    visit(new rootResource(), "");
+    visit(new rootResource(), "", []);
 
     const registeredRoutes = new Set<string>();
     for (const route of routes) {

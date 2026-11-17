@@ -83,6 +83,7 @@ function createRoutes(groupCount: number): Route[] {
       specificity: getPathSpecificity(path),
       resource,
       handler,
+      middlewares: [],
     });
   };
 

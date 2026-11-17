@@ -22,6 +22,8 @@ export type {
   HttpMultipartValue,
 } from "./parsing/parseMultipartBody.js";
 export { HttpResource } from "./decorators/HttpResource.js";
+export { HttpMiddleware } from "./decorators/HttpMiddleware.js";
+export type { HttpMiddlewareHandler } from "./metadata/ResourceMetadata.js";
 export {
   HttpDelete,
   HttpGet,
