@@ -422,11 +422,29 @@ class StatefulResource {
   }
 }
 
+async function setContextState(
+  context: HttpContext,
+  next: () => Promise<unknown>,
+) {
+  context.state.userId = context.req.headers["x-user-id"];
+  return next();
+}
+
+@HttpMiddleware(setContextState)
+@HttpResource("context-state")
+class ContextStateResource {
+  @HttpGet()
+  get(context: HttpContext) {
+    return { userId: context.state.userId };
+  }
+}
+
 @HttpResource("api")
 class TestApi {
   static readonly posts = new PostsResource();
 
   readonly state = new StatefulResource(99);
+  readonly contextState = new ContextStateResource();
 
   @HttpResource()
   readonly users = new UsersResource();
@@ -560,6 +578,22 @@ describe("HttpServer resource decorators", () => {
     assert.deepEqual(
       await Promise.all(responses.map((response) => response.json())),
       [{ count: 1 }, { count: 1 }],
+    );
+  });
+
+  it("shares request state between middleware and handlers without leaking it", async () => {
+    const responses = await Promise.all([
+      fetch(`${baseUrl}/api/context-state`, {
+        headers: { "x-user-id": "user-a" },
+      }),
+      fetch(`${baseUrl}/api/context-state`, {
+        headers: { "x-user-id": "user-b" },
+      }),
+    ]);
+
+    assert.deepEqual(
+      await Promise.all(responses.map((response) => response.json())),
+      [{ userId: "user-a" }, { userId: "user-b" }],
     );
   });
 

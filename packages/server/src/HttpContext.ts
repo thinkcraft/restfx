@@ -5,9 +5,13 @@ import { HttpResponse } from "./HttpResponse.js";
 import { HttpCookies } from "./HttpCookies.js";
 import { IocContainer } from "./IocContainer.js";
 
+/** Application-defined values shared by middleware and handlers for one request. */
+export interface HttpContextState extends Record<string, unknown> {}
+
 export class HttpContext {
   readonly signal: AbortSignal;
   readonly cookies: HttpCookies;
+  readonly state: HttpContextState = {};
 
   constructor(
     readonly req: HttpRequest,

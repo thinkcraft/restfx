@@ -226,7 +226,29 @@ with an error response.
 options?)` supports other method names with the same options shape. Route
   options can include request and response models.
 - The router invokes handlers with an `HttpContext`. `context.req` exposes the
-  request and `context.res` exposes the response.
+  request and `context.res` exposes the response. `context.state` is a fresh,
+  application-defined object for sharing values between middleware and handlers
+  during that request.
+
+Augment `HttpContextState` to give application state properties precise types.
+State is empty at the start of each request, so properties should generally be
+optional until middleware initializes them:
+
+```ts
+import type { HttpContextState } from "@framework/server";
+import type { User } from "./User.js";
+
+declare module "@framework/server" {
+  interface HttpContextState {
+    user?: User;
+  }
+}
+
+async function loadUser(context: HttpContext, next: () => Promise<unknown>) {
+  context.state.user = await findUser(context);
+  return next();
+}
+```
 
 `context.req.url` is a `URL`; `context.req.path` is its pathname without the
 query string. `context.req.params` contains decoded route parameters as strings.

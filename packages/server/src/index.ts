@@ -14,6 +14,7 @@ export type {
 } from "./HttpServer.js";
 export { HttpRouter } from "./routing/HttpRouter.js";
 export { HttpContext } from "./HttpContext.js";
+export type { HttpContextState } from "./HttpContext.js";
 export { IocContainer } from "./IocContainer.js";
 export type {
   HttpServiceFactory,
