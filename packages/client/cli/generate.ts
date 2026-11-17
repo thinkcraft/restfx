@@ -78,7 +78,7 @@ async function readOpenApi(spec: string) {
 }
 
 function printHelp() {
-  console.log(`Usage: pnpm --filter @framework/client generate -- --spec <url-or-file> --models <module-specifier> --out <file>
+  console.log(`Usage: pnpm --filter @restfx/client generate -- --spec <url-or-file> --models <module-specifier> --out <file>
 
 Generate a thin TypeScript fetch client from the framework OpenAPI document.
 The --models value is the import specifier from the generated file to the module

@@ -1,4 +1,4 @@
-import { HttpGet, HttpResource, OpenApiMiddleware } from "@framework/server";
+import { HttpGet, HttpResource, OpenApiMiddleware } from "@restfx/server";
 import {
   AttachmentsResource,
   AuthResource,

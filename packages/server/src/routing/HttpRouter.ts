@@ -23,7 +23,7 @@ import {
   validateModel,
   type ModelConstructor,
   type ValidationIssue,
-} from "@framework/core";
+} from "@restfx/core";
 import { getRequestModelMetadata } from "../request/RequestModelMetadata.js";
 import { getInjectedProperties } from "../metadata/InjectionMetadata.js";
 

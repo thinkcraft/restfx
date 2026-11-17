@@ -5,7 +5,7 @@ import {
   HttpResource,
   HttpResult,
   Inject,
-} from "@framework/server";
+} from "@restfx/server";
 import { AttachmentPathRequest } from "../models/AttachmentPathRequest.js";
 import { AttachmentService } from "../services/AttachmentService.js";
 

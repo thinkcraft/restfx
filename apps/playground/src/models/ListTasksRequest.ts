@@ -1,4 +1,4 @@
-import { Enum, Field, IntegerField, Model } from "@framework/core";
+import { Enum, Field, IntegerField, Model } from "@restfx/core";
 import { ProjectPathRequest } from "./ProjectPathRequest.js";
 
 @Model()

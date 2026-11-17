@@ -1,4 +1,4 @@
-import { ArrayOf, Field, IntegerField, Model } from "@framework/core";
+import { ArrayOf, Field, IntegerField, Model } from "@restfx/core";
 import { ProjectResponse } from "./ProjectResponse.js";
 
 @Model()

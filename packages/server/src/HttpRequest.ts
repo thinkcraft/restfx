@@ -15,7 +15,7 @@ import {
   NumberField,
   validateModel,
   type ModelConstructor,
-} from "@framework/core";
+} from "@restfx/core";
 import { getRequestModelMetadata } from "./request/RequestModelMetadata.js";
 
 export interface HttpParseBodyOptions<T = unknown> {

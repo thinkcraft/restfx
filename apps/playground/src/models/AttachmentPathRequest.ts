@@ -1,4 +1,4 @@
-import { Field, Model, StringField } from "@framework/core";
+import { Field, Model, StringField } from "@restfx/core";
 
 @Model()
 export class AttachmentPathRequest {

@@ -5,7 +5,7 @@ import type {
   ModelOptions,
 } from "./types.js";
 
-const modelFieldsMetadata = Symbol("framework.model.fields");
+const modelFieldsMetadata = Symbol("restfx.model.fields");
 const models = new WeakMap<Function, ModelMetadata>();
 
 // TypeScript's Stage 3 decorator transform uses Symbol.metadata when creating

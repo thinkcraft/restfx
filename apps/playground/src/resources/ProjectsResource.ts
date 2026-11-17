@@ -5,7 +5,7 @@ import {
   HttpResource,
   HttpResult,
   Inject,
-} from "@framework/server";
+} from "@restfx/server";
 import { CreateProjectRequest } from "../models/CreateProjectRequest.js";
 import { ListProjectsRequest } from "../models/ListProjectsRequest.js";
 import { ListProjectsResponse } from "../models/ListProjectsResponse.js";

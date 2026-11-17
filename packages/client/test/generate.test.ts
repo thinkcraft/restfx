@@ -36,7 +36,7 @@ const openApiDocument = {
             },
           },
         },
-        "x-framework-client": {
+        "x-restfx-client": {
           requestModel: {
             $ref: "#/components/schemas/CreateRecordRequest",
           },
@@ -52,12 +52,12 @@ const openApiDocument = {
   components: {
     schemas: {
       CreateRecordBody: {
-        "x-framework-model": "CreateRecordBody",
+        "x-restfx-model": "CreateRecordBody",
         type: "object",
         properties: { name: { type: "string", minLength: 2 } },
       },
       CreateRecordRequest: {
-        "x-framework-model": "CreateRecordRequest",
+        "x-restfx-model": "CreateRecordRequest",
         type: "object",
         properties: {
           id: { type: "string", format: "uuid" },
@@ -65,7 +65,7 @@ const openApiDocument = {
         },
       },
       RecordResponse: {
-        "x-framework-model": "RecordResponse",
+        "x-restfx-model": "RecordResponse",
         type: "object",
         properties: { id: { type: "string", format: "uuid" } },
       },
@@ -92,7 +92,7 @@ describe("API client generator", () => {
       },
     };
     document.components.schemas.CatEvent = {
-      "x-framework-model": "CatEvent",
+      "x-restfx-model": "CatEvent",
       type: "object",
       properties: {
         kind: { type: "string", enum: ["cat"] },
@@ -100,7 +100,7 @@ describe("API client generator", () => {
       },
     };
     document.components.schemas.DogEvent = {
-      "x-framework-model": "DogEvent",
+      "x-restfx-model": "DogEvent",
       type: "object",
       properties: { kind: { type: "string", enum: ["dog"] } },
     };
@@ -217,7 +217,7 @@ describe("API client generator", () => {
               },
             },
             responses: { "204": { description: "Uploaded" } },
-            "x-framework-client": {
+            "x-restfx-client": {
               requestModel: { $ref: "#/components/schemas/UploadRequest" },
               fields: [{ property: "id", source: "path", name: "id" }],
             },
@@ -227,7 +227,7 @@ describe("API client generator", () => {
       components: {
         schemas: {
           UploadRequest: {
-            "x-framework-model": "UploadRequest",
+            "x-restfx-model": "UploadRequest",
             type: "object",
             properties: { id: { type: "string" } },
           },

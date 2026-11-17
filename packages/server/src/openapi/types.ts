@@ -1,4 +1,4 @@
-import type { ModelConstructor } from "@framework/core";
+import type { ModelConstructor } from "@restfx/core";
 
 export type HttpResponseModel =
   ModelConstructor | { readonly arrayOf: ModelConstructor };

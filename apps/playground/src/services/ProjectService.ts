@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Inject } from "@framework/server";
+import { Inject } from "@restfx/server";
 import type { CreateProjectRequest } from "../models/CreateProjectRequest.js";
 import type { ListProjectsRequest } from "../models/ListProjectsRequest.js";
 import type { ProjectResponse } from "../models/ProjectResponse.js";

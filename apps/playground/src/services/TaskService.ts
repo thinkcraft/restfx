@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Inject } from "@framework/server";
+import { Inject } from "@restfx/server";
 import type { CreateTaskRequest } from "../models/CreateTaskRequest.js";
 import type { ListTasksRequest } from "../models/ListTasksRequest.js";
 import type { TaskResponse } from "../models/TaskResponse.js";

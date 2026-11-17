@@ -1,10 +1,8 @@
-import { getModelMetadata } from "@framework/core";
-import type { ModelConstructor, ModelFieldSource } from "@framework/core";
+import { getModelMetadata } from "@restfx/core";
+import type { ModelConstructor, ModelFieldSource } from "@restfx/core";
 import type { HttpRequestBodyOptions } from "../openapi/types.js";
 
-const requestBodyOptionsMetadata = Symbol(
-  "framework.server.requestBodyOptions",
-);
+const requestBodyOptionsMetadata = Symbol("restfx.server.requestBodyOptions");
 
 export type HttpRequestFieldSource = Exclude<ModelFieldSource, "body">;
 

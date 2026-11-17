@@ -1,5 +1,5 @@
 import { registerHandler } from "../metadata/ResourceMetadata.js";
-import type { ModelConstructor } from "@framework/core";
+import type { ModelConstructor } from "@restfx/core";
 import type {
   HttpOperationOptions,
   HttpResponseModel,

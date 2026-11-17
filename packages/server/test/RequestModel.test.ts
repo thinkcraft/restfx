@@ -24,7 +24,7 @@ import {
   TimeField,
   UnionOf,
   UUID,
-} from "@framework/core";
+} from "@restfx/core";
 
 @Model()
 class CreateRequestBody {
@@ -379,7 +379,7 @@ describe("HTTP request models", () => {
               requestBody: {
                 content: Record<string, { schema: Record<string, unknown> }>;
               };
-              "x-framework-client": {
+              "x-restfx-client": {
                 requestModel: { $ref: string };
                 fields: Array<{
                   property: string;
@@ -413,7 +413,7 @@ describe("HTTP request models", () => {
         document.components.schemas.CreateRequestBody!.properties.status,
         { type: "string", enum: ["active", "archived"] },
       );
-      assert.deepEqual(operation["x-framework-client"], {
+      assert.deepEqual(operation["x-restfx-client"], {
         requestModel: { $ref: "#/components/schemas/CreateRequest" },
         fields: [
           { property: "userId", source: "path", name: "userId" },

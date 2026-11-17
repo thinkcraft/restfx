@@ -1,4 +1,4 @@
-import { Field, Model, UUID } from "@framework/core";
+import { Field, Model, UUID } from "@restfx/core";
 
 @Model()
 export class ProjectPathRequest {

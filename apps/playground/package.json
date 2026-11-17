@@ -1,5 +1,5 @@
 {
-  "name": "@framework/playground",
+  "name": "@restfx/playground",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,12 +8,12 @@
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty false",
     "generate:client": "node --import tsx ./scripts/generate-client.ts && pnpm exec prettier --write src/api-client.ts",
-    "test": "pnpm --filter @framework/server build && pnpm --filter @framework/client build && node --import tsx --test ./test"
+    "test": "pnpm --filter @restfx/server build && pnpm --filter @restfx/client build && node --import tsx --test ./test"
   },
   "dependencies": {
-    "@framework/client": "workspace:*",
-    "@framework/core": "workspace:*",
-    "@framework/server": "workspace:*",
+    "@restfx/client": "workspace:*",
+    "@restfx/core": "workspace:*",
+    "@restfx/server": "workspace:*",
     "pino": "^10.4.0",
     "pino-pretty": "^13.2.0"
   }

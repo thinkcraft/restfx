@@ -4,7 +4,7 @@ import {
   HttpResource,
   HttpResult,
   Inject,
-} from "@framework/server";
+} from "@restfx/server";
 import { WorkspaceResponse } from "../models/WorkspaceResponse.js";
 import { WorkspaceService } from "../services/WorkspaceService.js";
 import { ProjectsResource } from "./ProjectsResource.js";

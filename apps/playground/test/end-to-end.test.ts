@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { describe, it } from "node:test";
 import { ApiError, createApiClient } from "../src/api-client.js";
 import { PlaygroundApi } from "../src/api.js";
-import { HttpServer } from "@framework/server";
+import { HttpServer } from "@restfx/server";
 import { createPlaygroundContainer } from "../src/services/index.js";
 
 const exampleWorkspaceId = "550e8400-e29b-41d4-a716-446655440000";

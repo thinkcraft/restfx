@@ -1,4 +1,4 @@
-import { IocContainer } from "@framework/server";
+import { IocContainer } from "@restfx/server";
 import { AttachmentService } from "./AttachmentService.js";
 import { AuthService } from "./AuthService.js";
 import { ProjectService } from "./ProjectService.js";

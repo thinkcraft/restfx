@@ -1,6 +1,6 @@
-# `@framework/core`
+# `@restfx/core`
 
-`@framework/core` contains browser-safe shared models, field types, validation,
+`@restfx/core` contains browser-safe shared models, field types, validation,
 and a small typed configuration helper. It has no dependency on Node.js or the
 HTTP server, so model classes can be imported by server and client code alike.
 
@@ -21,13 +21,7 @@ These are standard TypeScript decorators, not the legacy
 validation returns an instance containing only the declared fields:
 
 ```ts
-import {
-  Email,
-  Field,
-  Model,
-  StringField,
-  validateModel,
-} from "@framework/core";
+import { Email, Field, Model, StringField, validateModel } from "@restfx/core";
 
 @Model()
 class CreateUser {
@@ -57,7 +51,7 @@ override that policy for a single validation.
 
 ## Field types and options
 
-Built-in field types are exported from `@framework/core`:
+Built-in field types are exported from `@restfx/core`:
 
 - `StringField`, `BooleanField`, `NumberField`, and `IntegerField`
 - `Email` and `UUID` for validated strings with corresponding schema formats
@@ -83,7 +77,7 @@ Common `@Field` options include:
 
 Constraints are checked at runtime and represented in generated OpenAPI schemas.
 For schema formats and server integration, see the
-[`@framework/server` guide](../server/README.md#shared-models).
+[`@restfx/server` guide](../server/README.md#shared-models).
 
 ## Nested models and inheritance
 
@@ -92,7 +86,7 @@ models inherit decorated base fields and options; a derived field with the same
 name overrides the inherited field:
 
 ```ts
-import { Field, Model, StringField } from "@framework/core";
+import { Field, Model, StringField } from "@restfx/core";
 
 @Model()
 class Address {
@@ -128,7 +122,7 @@ validator can return nothing, one issue, or an array of issues. The generic
 provides a typed view of the validated model data:
 
 ```ts
-import { Field, Model, NumberField } from "@framework/core";
+import { Field, Model, NumberField } from "@restfx/core";
 
 type DateRange = { start: number; end: number };
 
@@ -159,7 +153,7 @@ Fields can optionally describe HTTP input locations with `source: "path"`,
 `"query"`, or `"header"`; `sourceName` changes the external parameter name.
 Nested body models can use `source: "body"`. This metadata is defined in core
 to keep the model reusable, but HTTP parsing and source conversion are handled
-by `@framework/server`. See its
+by `@restfx/server`. See its
 [combined request model guide](../server/README.md#combined-request-models).
 
 ## Configuration helper
@@ -168,7 +162,7 @@ by `@framework/server`. See its
 small `FrameworkConfig` shape, which currently contains an optional `port`:
 
 ```ts
-import { defineConfig } from "@framework/core";
+import { defineConfig } from "@restfx/core";
 
 export default defineConfig({ port: 3000 });
 ```

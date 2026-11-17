@@ -1,8 +1,8 @@
 {
-  "name": "framework",
+  "name": "restfx",
   "version": "0.1.0",
   "private": true,
-  "description": "A full-stack TypeScript framework",
+  "description": "RestFX, a full-stack TypeScript framework",
   "type": "module",
   "packageManager": "pnpm@11.1.0",
   "engines": {
@@ -11,10 +11,10 @@
   "scripts": {
     "build": "tsc -b",
     "clean": "tsc -b --clean",
-    "dev": "pnpm --filter @framework/playground dev",
+    "dev": "pnpm --filter @restfx/playground dev",
     "typecheck": "tsc -b --pretty false",
     "start": "tsx packages/server/src",
-    "test": "pnpm --filter @framework/* test"
+    "test": "pnpm --filter @restfx/* test"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

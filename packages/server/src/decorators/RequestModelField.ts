@@ -1,9 +1,9 @@
-import { Field } from "@framework/core";
+import { Field } from "@restfx/core";
 import type {
   FieldOptions,
   FieldTypeConstructor,
   ModelConstructor,
-} from "@framework/core";
+} from "@restfx/core";
 import type { HttpRequestBodyOptions } from "../openapi/types.js";
 import {
   registerRequestField,

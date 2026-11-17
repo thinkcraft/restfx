@@ -1,5 +1,5 @@
-import { defineConfig } from "@framework/core";
-import { HttpServer } from "@framework/server";
+import { defineConfig } from "@restfx/core";
+import { HttpServer } from "@restfx/server";
 import pino from "pino";
 import { PlaygroundApi } from "./api.js";
 import { createPlaygroundContainer } from "./services/index.js";

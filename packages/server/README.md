@@ -1,6 +1,6 @@
-# `@framework/server`
+# `@restfx/server`
 
-`@framework/server` is a Node.js HTTP server with nested resources, Stage 3
+`@restfx/server` is a Node.js HTTP server with nested resources, Stage 3
 decorators, middleware, parameterized routing, and bounded request-body parsing.
 It uses Node's `node:http` server; `HttpServer.listen()` returns the underlying
 Node `Server` instance.
@@ -68,8 +68,8 @@ import {
   HttpResource,
   HttpResult,
   HttpServer,
-} from "@framework/server";
-import { Field, Model, StringField } from "@framework/core";
+} from "@restfx/server";
+import { Field, Model, StringField } from "@restfx/core";
 
 @Model()
 class CreatePost {
@@ -130,7 +130,7 @@ import {
   HttpResource,
   HttpServer,
   Inject,
-} from "@framework/server";
+} from "@restfx/server";
 
 class Clock {
   now() {
@@ -235,10 +235,10 @@ State is empty at the start of each request, so properties should generally be
 optional until middleware initializes them:
 
 ```ts
-import type { HttpContextState } from "@framework/server";
+import type { HttpContextState } from "@restfx/server";
 import type { User } from "./User.js";
 
-declare module "@framework/server" {
+declare module "@restfx/server" {
   interface HttpContextState {
     user?: User;
   }
@@ -327,7 +327,7 @@ Use `@CorsMiddleware(options)` on the root resource to add CORS headers for
 matching request origins and handle preflight requests:
 
 ```ts
-import { CorsMiddleware, HttpResource } from "@framework/server";
+import { CorsMiddleware, HttpResource } from "@restfx/server";
 
 @CorsMiddleware({
   origins: ["https://app.example.com", "*.preview.example.com"],
@@ -365,7 +365,7 @@ import {
   HttpMiddleware,
   HttpResource,
   HttpResult,
-} from "@framework/server";
+} from "@restfx/server";
 
 async function requireToken(
   context: HttpContext,
@@ -412,12 +412,12 @@ limit return `413`.
 
 ### Shared models
 
-`@Model` and `@Field` are exported by `@framework/core` and can be shared by
+`@Model` and `@Field` are exported by `@restfx/core` and can be shared by
 server and browser code. Field types encapsulate reusable validation rules;
 field options describe presence, defaults, constraints, and documentation:
 
 ```ts
-import { Email, Field, Model, StringField } from "@framework/core";
+import { Email, Field, Model, StringField } from "@restfx/core";
 
 @Model()
 class CreateUser {
@@ -487,8 +487,8 @@ import {
   Model,
   StringField,
   UUID,
-} from "@framework/core";
-import { HttpContext, HttpPost, HttpResource } from "@framework/server";
+} from "@restfx/core";
+import { HttpContext, HttpPost, HttpResource } from "@restfx/server";
 
 @Model()
 class CreateUserBody {
@@ -535,8 +535,8 @@ class UsersResource {
 ```
 
 The field-validation decorators and `validateModel()` are provided by
-`@framework/core`. The `@PathParam`, `@QueryParam`, `@HeaderParam`, and `@Body`
-decorators remain available from `@framework/server` as compatibility helpers
+`@restfx/core`. The `@PathParam`, `@QueryParam`, `@HeaderParam`, and `@Body`
+decorators remain available from `@restfx/server` as compatibility helpers
 for server-only request classes.
 
 The router validates configured request models before invoking the handler;
@@ -713,7 +713,7 @@ dispatch.
 
 ## Benchmarks
 
-Run `pnpm --filter @framework/server bench:http` for a local end-to-end HTTP
+Run `pnpm --filter @restfx/server bench:http` for a local end-to-end HTTP
 benchmark. It exercises JSON and URL-encoded parsing, validated request models,
 binary and multipart request bodies; JSON, text, binary, and streaming
 responses; and a deeply nested route with named parameters. Results include
@@ -722,7 +722,7 @@ request across samples. Set `BENCH_ITERATIONS`, `BENCH_SAMPLES`, and
 `BENCH_WARMUP` to adjust the run size. Set `BENCH_CONCURRENCY` to a value
 greater than `1` to send requests from that many worker-thread clients;
 concurrent runs also report per-request p50, p95, and p99 latency. Run
-`pnpm --filter @framework/server bench:http:express` to exercise the same
+`pnpm --filter @restfx/server bench:http:express` to exercise the same
 scenarios and client against Express 5 with its built-in JSON, URL-encoded, and
 raw-body parsers plus Multer's in-memory multipart parser. Compare the two runs
 on the same Node version and machine; this local end-to-end benchmark is not a
@@ -730,7 +730,7 @@ substitute for production traffic tests. The separate `bench:routing` command
 measures router matching without HTTP or body parsing overhead. The HTTP
 benchmark runs the server in a separate process from its load-generating client.
 
-Run `pnpm --filter @framework/server loadtest:http` for a sustained local
+Run `pnpm --filter @restfx/server loadtest:http` for a sustained local
 load/soak run. It drives concurrent keep-alive clients against a separate server
 process with a mix of JSON responses, validated JSON requests, and streamed
 responses. Periodic output reports throughput, approximate p50/p95/p99 latency,
@@ -747,7 +747,7 @@ Configure the run with `LOAD_DURATION_SECONDS` (default `60`),
 baseline by that many MiB. For example:
 
 ```sh
-LOAD_DURATION_SECONDS=600 LOAD_CONCURRENCY=32 LOAD_MAX_HEAP_GROWTH_MB=32 pnpm --filter @framework/server loadtest:http
+LOAD_DURATION_SECONDS=600 LOAD_CONCURRENCY=32 LOAD_MAX_HEAP_GROWTH_MB=32 pnpm --filter @restfx/server loadtest:http
 ```
 
 This is a repeatable framework-level diagnostic, not proof that an application
@@ -760,5 +760,5 @@ defaults as production capacity guarantees.
 Pass concurrency directly to the benchmark script with:
 
 ```sh
-pnpm --filter @framework/server run bench:http -- --concurrency 4
+pnpm --filter @restfx/server run bench:http -- --concurrency 4
 ```

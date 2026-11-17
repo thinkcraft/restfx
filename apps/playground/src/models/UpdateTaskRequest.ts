@@ -1,4 +1,4 @@
-import { Field, Model } from "@framework/core";
+import { Field, Model } from "@restfx/core";
 import { UpdateTaskBody } from "./UpdateTaskBody.js";
 import { TaskPathRequest } from "./TaskPathRequest.js";
 

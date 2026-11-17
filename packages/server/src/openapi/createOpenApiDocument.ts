@@ -9,8 +9,8 @@ import {
   StringField,
   TimeField,
   UUID,
-} from "@framework/core";
-import type { ModelConstructor, ModelFieldMetadata } from "@framework/core";
+} from "@restfx/core";
+import type { ModelConstructor, ModelFieldMetadata } from "@restfx/core";
 import type { Route } from "../routing/Route.js";
 import { getResourceMetadata } from "../metadata/ResourceMetadata.js";
 import { getRequestModelMetadata } from "../request/RequestModelMetadata.js";
@@ -282,7 +282,7 @@ function createOperation(
     : undefined;
   const bodyField = requestMetadata?.body;
   const bodyModel = getRouteBodyModel(route);
-  result["x-framework-client"] = {
+  result["x-restfx-client"] = {
     ...(route.requestModel
       ? {
           requestModel: {
@@ -558,7 +558,7 @@ function createModelSchema(
     ...(metadata.options.description !== undefined
       ? { description: metadata.options.description }
       : {}),
-    "x-framework-model": model.name,
+    "x-restfx-model": model.name,
     type: "object",
     ...(required.length > 0 ? { required } : {}),
     properties,

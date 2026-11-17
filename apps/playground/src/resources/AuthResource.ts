@@ -6,7 +6,7 @@ import {
   HttpResource,
   HttpResult,
   Inject,
-} from "@framework/server";
+} from "@restfx/server";
 import { AuthSessionResponse } from "../models/AuthSessionResponse.js";
 import { LoginRequest } from "../models/LoginRequest.js";
 import { AuthService } from "../services/AuthService.js";

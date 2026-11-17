@@ -1,4 +1,4 @@
-import { Field, Model } from "@framework/core";
+import { Field, Model } from "@restfx/core";
 import { UpdateProjectBody } from "./UpdateProjectBody.js";
 import { ProjectPathRequest } from "./ProjectPathRequest.js";
 

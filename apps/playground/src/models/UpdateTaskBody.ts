@@ -1,4 +1,4 @@
-import { Enum, Field, IntegerField, Model, StringField } from "@framework/core";
+import { Enum, Field, IntegerField, Model, StringField } from "@restfx/core";
 
 @Model()
 export class UpdateTaskBody {

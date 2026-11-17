@@ -3,14 +3,14 @@
 ## Project structure and boundaries
 
 - This is a pnpm TypeScript monorepo. Use Node.js 24+ and pnpm 11.
-- `packages/core` (`@framework/core`) contains browser-safe shared model,
+- `packages/core` (`@restfx/core`) contains browser-safe shared model,
   validation, and configuration code. Do not add Node.js or HTTP-server
   dependencies here.
-- `packages/server` (`@framework/server`) owns Node HTTP behavior: resources,
+- `packages/server` (`@restfx/server`) owns Node HTTP behavior: resources,
   routing, middleware, request parsing, response handling, and OpenAPI
   generation. Keep transport- and parsing-specific behavior here rather than
   in core.
-- `packages/client` (`@framework/client`) owns browser fetch behavior and
+- `packages/client` (`@restfx/client`) owns browser fetch behavior and
   OpenAPI-based client generation. Keep it usable without Node.js APIs.
 - `apps/playground` is the runnable example application; use it for examples,
   not as a substitute for package-level tests.
@@ -67,7 +67,7 @@
   `pnpm exec prettier --check <files>`; there is no root lint script.
 - Run `git diff --check` before finishing. For package-specific work, the
   corresponding package test script can be run with, for example,
-  `pnpm --filter @framework/server test`.
+  `pnpm --filter @restfx/server test`.
 
 ## Documentation
 

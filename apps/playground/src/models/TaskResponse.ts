@@ -5,7 +5,7 @@ import {
   Model,
   StringField,
   UUID,
-} from "@framework/core";
+} from "@restfx/core";
 
 @Model()
 export class TaskResponse {

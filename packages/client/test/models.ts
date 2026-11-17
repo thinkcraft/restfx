@@ -1,4 +1,4 @@
-import { Field, Model, StringField, UUID } from "@framework/core";
+import { Field, Model, StringField, UUID } from "@restfx/core";
 
 @Model()
 export class CreateRecordBody {

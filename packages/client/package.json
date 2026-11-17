@@ -1,5 +1,5 @@
 {
-  "name": "@framework/client",
+  "name": "@restfx/client",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -17,6 +17,6 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@framework/core": "workspace:*"
+    "@restfx/core": "workspace:*"
   }
 }

@@ -1,9 +1,9 @@
-# `@framework/client`
+# `@restfx/client`
 
-`@framework/client` contains a small fetch wrapper and an API client generator.
+`@restfx/client` contains a small fetch wrapper and an API client generator.
 It runs in environments with the standard Fetch API and does not require Node.js
 APIs at runtime. The generator reads the framework's OpenAPI document, reuses
-the model classes named in its `x-framework-*` metadata, and emits typed
+the model classes named in its `x-restfx-*` metadata, and emits typed
 operation methods. Requests backed by framework models are validated locally
 before the generated method calls `fetch`; the server must still validate every
 request independently.
@@ -21,7 +21,7 @@ without generating operation methods. It returns the standard `Response`, so
 the application chooses how to parse the body and handle status codes:
 
 ```ts
-import { createClient } from "@framework/client";
+import { createClient } from "@restfx/client";
 
 const client = createClient({
   baseUrl: "https://api.example.test/v1/",
@@ -44,7 +44,7 @@ values taking precedence.
 Start the API, then run the generator from the workspace:
 
 ```sh
-pnpm --filter @framework/client generate -- \
+pnpm --filter @restfx/client generate -- \
   --spec http://localhost:3000/openapi.json \
   --models ./models.js \
   --out ../../apps/playground/src/api-client.ts
@@ -64,8 +64,8 @@ document's framework metadata. Keep those imports available to the generated
 module at runtime as well as to TypeScript. Regenerate the file when routes or
 models change, and review generated diffs alongside the OpenAPI change.
 
-Generated files import `validateModel` from `@framework/core` and the fetch
-wrapper from `@framework/client`. The consuming application therefore needs
+Generated files import `validateModel` from `@restfx/core` and the fetch
+wrapper from `@restfx/client`. The consuming application therefore needs
 those packages available at runtime. Configure the base URL and shared headers
 when creating the client:
 

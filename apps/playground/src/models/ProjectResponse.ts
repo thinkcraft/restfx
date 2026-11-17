@@ -1,11 +1,4 @@
-import {
-  ArrayOf,
-  Enum,
-  Field,
-  Model,
-  StringField,
-  UUID,
-} from "@framework/core";
+import { ArrayOf, Enum, Field, Model, StringField, UUID } from "@restfx/core";
 
 @Model({ description: "A project and its current lifecycle state." })
 export class ProjectResponse {

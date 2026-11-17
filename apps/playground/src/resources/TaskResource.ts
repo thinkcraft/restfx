@@ -5,7 +5,7 @@ import {
   HttpResource,
   HttpResult,
   Inject,
-} from "@framework/server";
+} from "@restfx/server";
 import { TaskPathRequest } from "../models/TaskPathRequest.js";
 import { TaskResponse } from "../models/TaskResponse.js";
 import { UpdateTaskRequest } from "../models/UpdateTaskRequest.js";

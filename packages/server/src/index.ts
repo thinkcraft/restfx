@@ -90,7 +90,7 @@ export {
   UUID,
   getModelMetadata,
   validateModel,
-} from "@framework/core";
+} from "@restfx/core";
 export type {
   FieldOptions,
   FieldType,
@@ -101,4 +101,4 @@ export type {
   ModelMetadata,
   ModelOptions,
   ValidationIssue,
-} from "@framework/core";
+} from "@restfx/core";

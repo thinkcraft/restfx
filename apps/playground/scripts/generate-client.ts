@@ -1,8 +1,8 @@
 import { once } from "node:events";
 import { writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
-import { HttpServer } from "@framework/server";
-import { generateClient } from "@framework/client";
+import { HttpServer } from "@restfx/server";
+import { generateClient } from "@restfx/client";
 import { PlaygroundApi } from "../src/api.js";
 import { createPlaygroundContainer } from "../src/services/index.js";
 

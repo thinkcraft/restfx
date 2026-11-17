@@ -23,13 +23,13 @@ importers:
 
   apps/playground:
     dependencies:
-      '@framework/client':
+      '@restfx/client':
         specifier: workspace:*
         version: link:../../packages/client
-      '@framework/core':
+      '@restfx/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@framework/server':
+      '@restfx/server':
         specifier: workspace:*
         version: link:../../packages/server
       pino:
@@ -41,7 +41,7 @@ importers:
 
   packages/client:
     dependencies:
-      '@framework/core':
+      '@restfx/core':
         specifier: workspace:*
         version: link:../core
 
@@ -49,7 +49,7 @@ importers:
 
   packages/server:
     dependencies:
-      '@framework/core':
+      '@restfx/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:

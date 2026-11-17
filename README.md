@@ -1,6 +1,6 @@
-# Framework
+# RestFX
 
-A TypeScript-first full-stack framework monorepo managed with pnpm. The
+RestFX is a TypeScript-first full-stack framework monorepo managed with pnpm. The
 workspace currently provides shared configuration helpers, a browser fetch
 client, and a Node.js HTTP server with decorator-based resources and routing.
 
@@ -11,10 +11,10 @@ client, and a Node.js HTTP server with decorator-based resources and routing.
 
 ## Workspace packages
 
-- `packages/core` (`@framework/core`) — shared models, field validation,
+- `packages/core` (`@restfx/core`) — shared models, field validation,
   enum field types, and typed framework configuration via `defineConfig`.
-- `packages/client` (`@framework/client`) — a small configurable fetch client.
-- `packages/server` (`@framework/server`) — Node.js HTTP server, decorated
+- `packages/client` (`@restfx/client`) — a small configurable fetch client.
+- `packages/server` (`@restfx/server`) — Node.js HTTP server, decorated
   resources, middleware, routing, and request-body parsing. See the
   [server README](packages/server/README.md) for usage and behavior.
 - `apps/playground` — runnable example application.
@@ -88,9 +88,9 @@ colorized Pino logs.
 To explore the packages independently, run a package's test suite:
 
 ```sh
-pnpm --filter @framework/core test
-pnpm --filter @framework/server test
-pnpm --filter @framework/client test
+pnpm --filter @restfx/core test
+pnpm --filter @restfx/server test
+pnpm --filter @restfx/client test
 ```
 
 The package guides describe each package's runtime boundary and examples.
@@ -100,7 +100,7 @@ literal union, validates values at runtime, and generates the corresponding
 OpenAPI enum schema:
 
 ```ts
-import { Enum, Field, Model } from "@framework/core";
+import { Enum, Field, Model } from "@restfx/core";
 
 @Model({ description: "A project and its current lifecycle state." })
 class Project {
@@ -126,7 +126,7 @@ import {
   NumberField,
   StringField,
   UnionOf,
-} from "@framework/core";
+} from "@restfx/core";
 
 @Model()
 class Cat {
@@ -201,5 +201,5 @@ pnpm clean       # clean TypeScript build outputs
 The server package also includes a routing benchmark:
 
 ```sh
-pnpm --filter @framework/server bench:routing
+pnpm --filter @restfx/server bench:routing
 ```
