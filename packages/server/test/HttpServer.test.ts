@@ -67,13 +67,15 @@ class UserResponseModel {
   name!: string;
 }
 
+@HttpResource("posts")
 class PostsResource {
   @HttpGet()
   list() {
     return [{ id: 1, title: "First post" }];
   }
 
-  @HttpGet(":id", {
+  @HttpGet({
+    path: ":id",
     summary: "Get a post",
     operationId: "getPost",
     tags: ["posts"],
@@ -96,12 +98,12 @@ class PostsResource {
     return { id: ctx.req.params.id };
   }
 
-  @HttpGet("featured")
+  @HttpGet({ path: "featured" })
   getFeaturedPost() {
     return { id: "featured", type: "static" };
   }
 
-  @HttpGet(":id/comments")
+  @HttpGet({ path: ":id/comments" })
   getComments(ctx: HttpContext) {
     return [
       { id: "c1", parentId: ctx.req.params.id },
@@ -109,12 +111,12 @@ class PostsResource {
     ];
   }
 
-  @HttpGet("required/:id/value")
+  @HttpGet({ path: "required/:id/value" })
   getRequiredPost(ctx: HttpContext) {
     return { id: ctx.req.params.id };
   }
 
-  @HttpGet("optional/:id?")
+  @HttpGet({ path: "optional/:id?" })
   getOptionalPost(ctx: HttpContext) {
     return {
       hasId: Object.hasOwn(ctx.req.params, "id"),
@@ -122,19 +124,19 @@ class PostsResource {
     };
   }
 
-  @HttpGet("files/:path*")
+  @HttpGet({ path: "files/:path*" })
   getFilePath(ctx: HttpContext) {
     return { path: ctx.req.params.path };
   }
 
-  @HttpGet("stream")
+  @HttpGet({ path: "stream" })
   async *stream() {
     yield "first ";
     yield Buffer.from("chunk");
     yield "!";
   }
 
-  @HttpGet("result-stream")
+  @HttpGet({ path: "result-stream" })
   resultStream() {
     async function* body() {
       yield "streamed ";
@@ -146,7 +148,8 @@ class PostsResource {
     });
   }
 
-  @HttpPost("create", {
+  @HttpPost({
+    path: "create",
     responses: {
       "201": {
         description: "Post created",
@@ -158,12 +161,12 @@ class PostsResource {
     return new HttpResult(201, { id: 2 });
   }
 
-  @HttpPost("echo")
+  @HttpPost({ path: "echo" })
   async echo(ctx: HttpContext) {
     return ctx.req.parseBody<{ title: string; tags: string[] }>();
   }
 
-  @HttpPost("form")
+  @HttpPost({ path: "form" })
   async form(ctx: HttpContext) {
     return ctx.req.parseBody<{
       name: string;
@@ -171,7 +174,7 @@ class PostsResource {
     }>();
   }
 
-  @HttpPost("binary")
+  @HttpPost({ path: "binary" })
   async binary(ctx: HttpContext) {
     return [...(await ctx.req.parseBody<Buffer>())];
   }
@@ -188,7 +191,7 @@ class UsersResource {
     return [{ id: "u1" }];
   }
 
-  @HttpPost("", {
+  @HttpPost({
     body: CreateUserModel,
     response: UserResponseModel,
     responses: {
@@ -205,20 +208,20 @@ class UsersResource {
     };
   }
 
-  @HttpPost("instance", { body: CreateUserModel })
+  @HttpPost({ path: "instance", body: CreateUserModel })
   async checkBodyInstance(context: HttpContext) {
     const input = await context.req.parseBody<CreateUserModel>();
     return { isInstance: input instanceof CreateUserModel };
   }
 
-  @HttpGet("invalid-response", { response: UserResponseModel })
+  @HttpGet({ path: "invalid-response", response: UserResponseModel })
   invalidResponse() {
     return { id: 123, email: "not-an-email", name: "Invalid" };
   }
 }
 
 class UploadResource {
-  @HttpPut(":id/content")
+  @HttpPut({ path: ":id/content" })
   async upload(context: HttpContext) {
     let bytes = 0;
     let chunks = 0;
@@ -237,7 +240,7 @@ class UploadResource {
     return { id: context.req.params.id, bytes, chunks };
   }
 
-  @HttpPut("limited")
+  @HttpPut({ path: "limited" })
   async limited(context: HttpContext) {
     await pipeline(
       context.req.streamBody({ maxBytes: 4 }),
@@ -277,7 +280,7 @@ let errorBeforeFinalized = deferred();
 let errorAfterFinalized = deferred();
 
 class StreamingBehaviorResource {
-  @HttpGet("cancel")
+  @HttpGet({ path: "cancel" })
   async *cancel() {
     try {
       yield "first";
@@ -290,7 +293,7 @@ class StreamingBehaviorResource {
     }
   }
 
-  @HttpGet("cancel-cleanup-error")
+  @HttpGet({ path: "cancel-cleanup-error" })
   async *cancelWithCleanupError() {
     try {
       yield "first";
@@ -304,7 +307,7 @@ class StreamingBehaviorResource {
     }
   }
 
-  @HttpGet("pending")
+  @HttpGet({ path: "pending" })
   async *pending() {
     try {
       pendingStreamStarted.resolve();
@@ -317,7 +320,7 @@ class StreamingBehaviorResource {
     }
   }
 
-  @HttpGet("error-before")
+  @HttpGet({ path: "error-before" })
   async *errorBefore() {
     try {
       throw new Error("stream failed before the first chunk");
@@ -328,7 +331,7 @@ class StreamingBehaviorResource {
     }
   }
 
-  @HttpGet("error-after")
+  @HttpGet({ path: "error-after" })
   async *errorAfter() {
     try {
       yield "first";
@@ -341,12 +344,12 @@ class StreamingBehaviorResource {
     }
   }
 
-  @HttpGet("invalid-before")
+  @HttpGet({ path: "invalid-before" })
   async *invalidBefore() {
     yield 42;
   }
 
-  @HttpGet("invalid-after")
+  @HttpGet({ path: "invalid-after" })
   async *invalidAfter() {
     yield "first";
     await new Promise<void>((resolve) => {
@@ -355,23 +358,23 @@ class StreamingBehaviorResource {
     yield 42;
   }
 
-  @HttpGet("head-stream")
+  @HttpGet({ path: "head-stream" })
   async *headStream() {
     noConsumeStreamStarted++;
     yield "not consumed";
   }
 
-  @HttpGet("no-content-stream")
+  @HttpGet({ path: "no-content-stream" })
   noContentStream() {
     return new HttpResult(204, this.noConsumeBody());
   }
 
-  @HttpGet("not-modified-stream")
+  @HttpGet({ path: "not-modified-stream" })
   notModifiedStream() {
     return new HttpResult(304, this.noConsumeBody());
   }
 
-  @HttpGet("backpressure")
+  @HttpGet({ path: "backpressure" })
   async *backpressure() {
     backpressurePulls++;
     yield "first";
@@ -387,7 +390,6 @@ class StreamingBehaviorResource {
 
 @HttpResource("api")
 class TestApi {
-  @HttpResource()
   static readonly posts = new PostsResource();
 
   @HttpResource()
@@ -441,7 +443,7 @@ async function rootMiddleware(
 @HttpMiddleware(rootMiddleware)
 @HttpResource()
 class OpenApiMiddlewareApi {
-  @HttpGet("status", { summary: "Get API status" })
+  @HttpGet({ path: "status", summary: "Get API status" })
   status() {
     return { online: true };
   }
@@ -462,9 +464,10 @@ async function sharedResourceMiddleware(
   return result;
 }
 
+@HttpResource("items")
 @HttpMiddleware(sharedResourceMiddleware)
 class MiddlewareItemsResource {
-  @HttpGet(":id")
+  @HttpGet({ path: ":id" })
   get(context: HttpContext) {
     middlewareTrace.push("handler");
     return { id: context.req.params.id, path: context.req.path };
@@ -483,7 +486,6 @@ class OtherMiddlewareResource {
 @HttpMiddleware(rootMiddleware)
 @HttpResource("middleware")
 class MiddlewareApi {
-  @HttpResource("items")
   readonly items = new MiddlewareItemsResource();
 
   @HttpResource("other")
@@ -1285,7 +1287,7 @@ const slowRequestStarted = new Promise<void>((resolve) => {
 });
 
 class LifecycleResource {
-  @HttpGet("slow")
+  @HttpGet({ path: "slow" })
   async slow() {
     notifySlowRequestStarted();
     await new Promise<void>((resolve) => {
@@ -1294,7 +1296,7 @@ class LifecycleResource {
     return new HttpResult(200, { completed: true }, { connection: "close" });
   }
 
-  @HttpMethod("GET", "ready")
+  @HttpMethod("GET", { path: "ready" })
   ready() {
     return { ready: true };
   }
@@ -1308,7 +1310,7 @@ class ProxyUrlResource {
 }
 
 class InvalidOptionalParameterResource {
-  @HttpGet(":id?/details")
+  @HttpGet({ path: ":id?/details" })
   getDetails() {
     return {};
   }

@@ -27,23 +27,23 @@ const concurrency = readPositiveInteger(
 );
 
 class ParsingResource {
-  @HttpPost("json")
+  @HttpPost({ path: "json" })
   async json(context: HttpContext) {
     return context.req.parseBody<Record<string, unknown>>();
   }
 
-  @HttpPost("form")
+  @HttpPost({ path: "form" })
   async form(context: HttpContext) {
     return context.req.parseBody<Record<string, unknown>>();
   }
 
-  @HttpPost("binary")
+  @HttpPost({ path: "binary" })
   async binary(context: HttpContext) {
     const body = await context.req.parseBody<Buffer>();
     return { bytes: body.byteLength };
   }
 
-  @HttpPost("multipart")
+  @HttpPost({ path: "multipart" })
   async multipart(context: HttpContext) {
     const body = await context.req.parseBody<{
       note: string;
@@ -61,7 +61,7 @@ class ResponseResource {
   // noinspection JSUnusedLocalSymbols
   private readonly binaryBody = Buffer.alloc(16 * 1024, 0x62);
 
-  @HttpGet("json")
+  @HttpGet({ path: "json" })
   json() {
     return {
       ok: true,
@@ -69,23 +69,23 @@ class ResponseResource {
     };
   }
 
-  @HttpGet("text")
+  @HttpGet({ path: "text" })
   text() {
     return "benchmark response ".repeat(256);
   }
 
-  @HttpGet("binary")
+  @HttpGet({ path: "binary" })
   binary() {
     return this.binaryBody;
   }
 
-  @HttpGet("stream")
+  @HttpGet({ path: "stream" })
   async *stream() {
     const chunk = "s".repeat(1_024);
     for (let index = 0; index < 16; index++) yield chunk;
   }
 
-  @HttpGet("stream-single")
+  @HttpGet({ path: "stream-single" })
   async *streamSingle() {
     yield "s".repeat(16 * 1_024);
   }

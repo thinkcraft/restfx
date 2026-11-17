@@ -8,10 +8,15 @@ import {
   type HttpRequestBodyStreamOptions,
 } from "./parsing/createRequestBodyStream.js";
 import {
+  BooleanField,
+  getModelMetadata,
+  IntegerField,
   ModelValidationError,
+  NumberField,
   validateModel,
   type ModelConstructor,
 } from "@framework/core";
+import { getRequestModelMetadata } from "./request/RequestModelMetadata.js";
 
 export interface HttpParseBodyOptions<T = unknown> {
   readonly maxBytes?: number;
@@ -24,13 +29,23 @@ export class HttpRequest {
   private _bodyMode: "unused" | "buffered" | "stream" = "unused";
   private _bodyModel?: ModelConstructor;
   private _validatedBody?: Promise<unknown>;
+  private _requestModels = new WeakMap<ModelConstructor, Promise<unknown>>();
   private readonly _abortController = new AbortController();
 
   readonly method: string;
   readonly url: URL;
   readonly path: string;
   readonly signal = this._abortController.signal;
-  params: Record<string, string> = {};
+  private _params: Record<string, string> = {};
+
+  get params() {
+    return this._params;
+  }
+
+  set params(value: Record<string, string>) {
+    this._params = value;
+    this._requestModels = new WeakMap();
+  }
 
   get headers() {
     return this.req.headers;
@@ -215,6 +230,105 @@ export class HttpRequest {
     return (await this._body) as T;
   }
 
+  /** Collects, validates, and returns a model assembled from request sources. */
+  async model<T>(model: ModelConstructor<T>): Promise<T> {
+    let requestModel = this._requestModels.get(model);
+    if (!requestModel) {
+      requestModel = this.createRequestModel(model);
+      this._requestModels.set(model, requestModel);
+    }
+    return (await requestModel) as T;
+  }
+
+  private async createRequestModel<T>(model: ModelConstructor<T>): Promise<T> {
+    const sourceMetadata = getRequestModelMetadata(model);
+    const modelMetadata = getModelMetadata(model);
+    if (!modelMetadata) {
+      throw new TypeError(
+        `${model.name || "Model"} is not decorated with @Model`,
+      );
+    }
+
+    const input: Record<string, unknown> = {};
+    for (const source of sourceMetadata.fields) {
+      const field = modelMetadata.fields.get(source.property);
+      if (!field) {
+        throw new TypeError(
+          `Request source field ${source.property} is missing @Field metadata`,
+        );
+      }
+      const name = source.name ?? source.property;
+      let value: unknown;
+      switch (source.source) {
+        case "path":
+          value = this.params[name];
+          break;
+        case "query": {
+          const values = this.url.searchParams.getAll(name);
+          if (values.length > 0) {
+            value = hasArrayFieldType(field.type)
+              ? values
+              : values.length === 1
+                ? values[0]
+                : values;
+          }
+          break;
+        }
+        case "header": {
+          const header = this.headers[name.toLowerCase()];
+          if (header !== undefined) {
+            value =
+              hasArrayFieldType(field.type) && !Array.isArray(header)
+                ? [header]
+                : header;
+          }
+          break;
+        }
+      }
+      if (value !== undefined) {
+        input[source.property] = coerceRequestValue(value, field.type);
+      }
+    }
+
+    const result = this.validateRequestModel(input, model);
+    if (sourceMetadata.body) {
+      const bodyField = sourceMetadata.body;
+      if (modelMetadata.fields.has(bodyField.property)) {
+        throw new TypeError(
+          `@Body field ${bodyField.property} must not also use @Field`,
+        );
+      }
+      const body = await this.parseBody({
+        model: bodyField.model!,
+        maxBytes: bodyField.bodyMaxBytes,
+      });
+      Object.defineProperty(result, bodyField.property, {
+        configurable: true,
+        enumerable: true,
+        value: body,
+        writable: true,
+      });
+      return result;
+    }
+
+    return result;
+  }
+
+  private validateRequestModel<T>(input: unknown, model: ModelConstructor<T>) {
+    try {
+      return validateModel(input, model);
+    } catch (error) {
+      if (error instanceof ModelValidationError) {
+        throw new HttpError(
+          HttpStatusCode.UnprocessableEntity,
+          "Request failed model validation",
+          error.issues,
+        );
+      }
+      throw error;
+    }
+  }
+
   /**
    * Returns a one-shot, bounded stream of the raw request body. The default
    * limit is 1 MiB. Use parseBody() instead for buffered form or JSON payloads.
@@ -232,4 +346,36 @@ export class HttpRequest {
     error.name = "AbortError";
     this._abortController.abort(error);
   };
+}
+
+function hasArrayFieldType(type: Function) {
+  return Object.hasOwn(type, "itemType");
+}
+
+function coerceRequestValue(value: unknown, type: Function): unknown {
+  const itemType = (type as typeof type & { itemType?: Function }).itemType;
+  if (itemType) {
+    const values = Array.isArray(value) ? value : [value];
+    return values.map((item) => coerceRequestValue(item, itemType));
+  }
+  if (typeof value !== "string") return value;
+  if (isFieldType(type, BooleanField)) {
+    if (value === "true") return true;
+    if (value === "false") return false;
+  }
+  if (isFieldType(type, IntegerField) && /^-?\d+$/.test(value)) {
+    return Number(value);
+  }
+  if (
+    isFieldType(type, NumberField) &&
+    value.trim() !== "" &&
+    Number.isFinite(Number(value))
+  ) {
+    return Number(value);
+  }
+  return value;
+}
+
+function isFieldType(type: Function, base: Function) {
+  return type === base || type.prototype instanceof base;
 }

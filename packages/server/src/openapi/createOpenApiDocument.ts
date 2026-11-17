@@ -9,6 +9,7 @@ import {
 } from "@framework/core";
 import type { ModelConstructor, ModelFieldMetadata } from "@framework/core";
 import type { Route } from "../routing/Route.js";
+import { getRequestModelMetadata } from "../request/RequestModelMetadata.js";
 import type {
   HttpResponseOptions,
   OpenApiDocument,
@@ -103,7 +104,7 @@ export function createOpenApiDocument(
   for (const [model, name] of modelNames) {
     schemas[name] = createModelSchema(model, modelNames);
   }
-  if (routes.some((route) => route.bodyModel)) {
+  if (routes.some((route) => route.bodyModel || route.requestModel)) {
     schemas.ValidationIssue = {
       type: "object",
       required: ["path", "message"],
@@ -175,6 +176,9 @@ function createOperation(
   for (const parameter of inferredPathParameters) {
     parameterMap.set(`${parameter.in}:${parameter.name}`, parameter);
   }
+  for (const parameter of getRequestModelParameters(route, path)) {
+    parameterMap.set(`${parameter.in}:${parameter.name}`, parameter);
+  }
   for (const parameter of operation.parameters ?? []) {
     if (
       parameter.in === "path" &&
@@ -222,9 +226,11 @@ function createOperation(
       }
     }
   }
-  if (route.bodyModel && !responses["422"]) {
+  if ((route.bodyModel || route.requestModel) && !responses["422"]) {
     responses["422"] = {
-      description: "Request body failed model validation",
+      description: route.bodyModel
+        ? "Request body failed model validation"
+        : "Request failed model validation",
       content: {
         "application/json": {
           schema: { $ref: "#/components/schemas/RequestValidationError" },
@@ -232,7 +238,7 @@ function createOperation(
       },
     };
   }
-  if (route.bodyModel) {
+  if (getRouteBodyModel(route)) {
     for (const [status, description] of [
       ["400", "The request body is malformed"],
       ["413", "The request body is too large"],
@@ -269,18 +275,25 @@ function createOperation(
     result.operationId = defaultOperationId;
   delete result.parameters;
   if (parameterMap.size > 0) result.parameters = [...parameterMap.values()];
-  if (route.bodyModel || route.requestBody) {
-    const bodyOptions = route.requestBody ?? {};
+  const requestBodyModel = getRouteBodyModel(route);
+  const requestModelBodyOptions = route.requestModel
+    ? getRequestModelMetadata(route.requestModel).body?.bodyOptions
+    : undefined;
+  if (requestBodyModel || route.requestBody || requestModelBodyOptions) {
+    const bodyOptions = {
+      ...requestModelBodyOptions,
+      ...route.requestBody,
+    };
     const schema =
       bodyOptions.schema ??
-      (route.bodyModel
-        ? { $ref: `#/components/schemas/${modelNames.get(route.bodyModel)!}` }
+      (requestBodyModel
+        ? { $ref: `#/components/schemas/${modelNames.get(requestBodyModel)!}` }
         : undefined);
     result.requestBody = {
       ...(bodyOptions.description
         ? { description: bodyOptions.description }
         : {}),
-      required: bodyOptions.required ?? Boolean(route.bodyModel),
+      required: bodyOptions.required ?? Boolean(requestBodyModel),
       content: {
         [bodyOptions.contentType ?? "application/json"]: {
           ...(schema ? { schema } : {}),
@@ -296,6 +309,61 @@ function createOperation(
 
 function getRouteMethodName(route: Route) {
   return typeof route.name === "string" ? route.name : route.handler.name;
+}
+
+function getRouteBodyModel(route: Route) {
+  if (route.bodyModel) return route.bodyModel;
+  return route.requestModel
+    ? getRequestModelMetadata(route.requestModel).body?.model
+    : undefined;
+}
+
+function getRequestModelParameters(route: Route, path: string) {
+  if (!route.requestModel) return [];
+
+  const requestModel = route.requestModel;
+  const requestMetadata = getRequestModelMetadata(requestModel);
+  const modelMetadata = getModelMetadata(requestModel);
+  if (!modelMetadata) {
+    throw new TypeError(
+      `${requestModel.name || "Model"} is not decorated with @Model`,
+    );
+  }
+
+  const routePathParameters = getRoutePathParameterNames(route.path);
+  const pathParameters = getPathParameterNames(path);
+  return requestMetadata.fields.flatMap((requestField) => {
+    if (requestField.source === "body") return [];
+    const name = requestField.name ?? requestField.property;
+    if (requestField.source === "path" && !routePathParameters.includes(name)) {
+      throw new TypeError(
+        `Path parameter ${name} from ${requestModel.name || "request model"} is not present in route ${route.path}`,
+      );
+    }
+    if (requestField.source === "path" && !pathParameters.includes(name)) {
+      return [];
+    }
+
+    const field = modelMetadata.fields.get(requestField.property);
+    if (!field) {
+      throw new TypeError(
+        `Request source field ${requestField.property} is missing @Field metadata`,
+      );
+    }
+    return [
+      {
+        name,
+        in: requestField.source,
+        required:
+          requestField.source === "path"
+            ? true
+            : !field.optional && field.default === undefined,
+        ...(field.description ? { description: field.description } : {}),
+        ...(field.deprecated ? { deprecated: true } : {}),
+        schema: createFieldSchema(field),
+      },
+    ];
+  });
 }
 
 function modelResponse(
@@ -335,6 +403,10 @@ function createModelNames(routes: readonly Route[]) {
   const models = new Set<ModelConstructor>();
   for (const route of routes) {
     if (route.bodyModel) models.add(route.bodyModel);
+    if (route.requestModel) {
+      const body = getRequestModelMetadata(route.requestModel).body;
+      if (body?.model) models.add(body.model);
+    }
     if (route.responseModel) models.add(route.responseModel);
     for (const response of Object.values(route.responses ?? {})) {
       if (response.model) models.add(response.model);
@@ -347,7 +419,7 @@ function createModelNames(routes: readonly Route[]) {
       ? []
       : [
           "HttpErrorResponse",
-          ...(routes.some((route) => route.bodyModel)
+          ...(routes.some((route) => route.bodyModel || route.requestModel)
             ? ["ValidationIssue", "RequestValidationError"]
             : []),
         ],

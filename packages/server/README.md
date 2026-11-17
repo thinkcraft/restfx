@@ -17,13 +17,14 @@ import {
   HttpServer,
 } from "@framework/server";
 
+@HttpResource("posts")
 class PostsResource {
   @HttpGet()
   list() {
     return [{ id: "1", title: "Hello" }];
   }
 
-  @HttpGet(":id")
+  @HttpGet({ path: ":id" })
   get(context: HttpContext) {
     return { id: context.req.params.id };
   }
@@ -37,7 +38,6 @@ class PostsResource {
 
 @HttpResource("api")
 class ApiResource {
-  @HttpResource("posts")
   readonly posts = new PostsResource();
 }
 
@@ -59,14 +59,14 @@ single body. Set a response `content-type` header explicitly when appropriate;
 otherwise streams default to `application/octet-stream`.
 
 ```ts
-@HttpGet("events")
+@HttpGet({ path: "events" })
 async *events(context: HttpContext) {
   context.res.setHeader("content-type", "text/event-stream; charset=utf-8");
   yield "event: ready\ndata: connected\n\n";
   yield "event: update\ndata: data available\n\n";
 }
 
-@HttpGet("download")
+@HttpGet({ path: "download" })
 download() {
   async function* chunks() {
     yield Buffer.from("file contents");
@@ -86,16 +86,19 @@ with an error response.
 ## Resources and handlers
 
 - `@HttpResource(path?)` marks a resource class and optionally gives it a path
-  prefix. It can also decorate a resource-valued field to mount a child.
-- A mounted field uses its explicit decorator path, then the child's class
-  path, then the field name, in that order.
+  prefix. A resource-valued field whose class is decorated with `@HttpResource`
+  is discovered and mounted automatically; no field decorator is needed.
+- `@HttpResource(path?)` can also decorate a resource-valued field. In that
+  case, the field's explicit path takes precedence over the child's class path,
+  followed by the field name as a fallback.
 - Child resources can be supplied as instances or constructors. Static and
   instance fields are supported.
-- `@HttpGet(path?)`, `@HttpPost(path?)`, `@HttpPut(path?)`,
-  `@HttpPatch(path?)`, and `@HttpDelete(path?)` register method handlers.
-  `@HttpMethod(method, path?)` supports other method names. Each method
-  decorator can also receive route options, including request and response
-  models.
+- `@HttpGet(options?)`, `@HttpPost(options?)`, `@HttpPut(options?)`,
+  `@HttpPatch(options?)`, and `@HttpDelete(options?)` register method handlers.
+  Set the optional route path in that config object, for example
+  `@HttpPost({ path: "users", body: CreatePost })`. `@HttpMethod(method,
+options?)` supports other method names with the same options shape. Route
+  options can include request and response models.
 - The router invokes handlers with an `HttpContext`. `context.req` exposes the
   request and `context.res` exposes the response.
 
@@ -107,7 +110,7 @@ query string. `context.req.params` contains decoded route parameters as strings.
 Parameters use a colon-prefixed name and are required by default:
 
 ```ts
-@HttpGet("users/:userId")
+@HttpGet({ path: "users/:userId" })
 getUser(context: HttpContext) {
   return { id: context.req.params.userId };
 }
@@ -223,7 +226,7 @@ Attach models to routes to validate buffered request bodies and shape JSON
 responses:
 
 ```ts
-@HttpPost("users", { body: CreateUser, response: UserResponse })
+@HttpPost({ path: "users", body: CreateUser, response: UserResponse })
 async create(context: HttpContext) {
   const input = await context.req.parseBody<CreateUser>();
   return createUser(input);
@@ -236,6 +239,72 @@ by default. The model constructor is not invoked during validation. Invalid mode
 data returns `422` with field-path issues. Response models validate JSON results
 and strip undeclared fields. They do not apply to raw streamed responses or
 streamed request bodies.
+
+### Combined request models
+
+Use `@PathParam`, `@QueryParam`, `@HeaderParam`, and `@Body` to declare one
+request model spanning multiple HTTP sources. Path, query, and header fields
+also use normal `@Field` validation options; query/path/header strings are
+converted to booleans and numbers when their field type requires it. Repeated
+query values are supported with `ArrayOf`. A body remains a nested model and is
+parsed with the same bounded parser as `parseBody()`:
+
+```ts
+import {
+  ArrayOf,
+  Body,
+  BooleanField,
+  Field,
+  HeaderParam,
+  HttpContext,
+  HttpPost,
+  Model,
+  PathParam,
+  QueryParam,
+  StringField,
+  UUID,
+} from "@framework/server";
+
+@Model()
+class CreateUserBody {
+  @Field({ type: StringField, minLength: 2 })
+  name!: string;
+}
+
+@Model()
+class CreateUserRequest {
+  @PathParam({ type: UUID })
+  userId!: string;
+
+  @QueryParam({ type: BooleanField, optional: true })
+  dryRun?: boolean;
+
+  @QueryParam({ type: ArrayOf(StringField), optional: true, name: "tag" })
+  tags?: string[];
+
+  @HeaderParam("x-client-id", { type: UUID, optional: true })
+  clientId?: string;
+
+  @Body(CreateUserBody)
+  body!: CreateUserBody;
+}
+
+class UsersResource {
+  @HttpPost({ path: ":userId", request: CreateUserRequest })
+  async create(context: HttpContext) {
+    const request = await context.req.model(CreateUserRequest);
+    return request;
+  }
+}
+```
+
+The router validates configured request models before invoking the handler;
+calling `context.req.model(CreateUserRequest)` returns the same cached model
+instance. Invalid path/query/header fields return `422`; body parsing retains its
+usual `400`, `413`, and `415` errors, and invalid body fields return `422`.
+OpenAPI generates path/query/header parameters and the nested request-body schema
+from this metadata. The body is still buffered and bounded; use `streamBody()`
+for large uploads instead.
 
 ### OpenAPI
 
@@ -271,7 +340,7 @@ must be unique. Repeated method names receive no default ID; set an explicit
 `operationId` when one is needed:
 
 ```ts
-@HttpGet(":id", {
+@HttpGet({ path: ":id",
   summary: "Get a user",
   operationId: "getUser",
   tags: ["users"],
@@ -305,7 +374,7 @@ socket, or storage client to preserve backpressure:
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 
-@HttpPut(":id/content")
+@HttpPut({ path: ":id/content" })
 async upload(context: HttpContext) {
   const destination = createWriteStream(
     serverGeneratedPath(context.req.params.id),

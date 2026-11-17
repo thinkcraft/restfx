@@ -36,13 +36,13 @@ async function auditMiddleware(
 @HttpMiddleware(auditMiddleware)
 @HttpResource()
 class InterceptedDocsResource {
-  @HttpGet("reference/openapi.json")
+  @HttpGet({ path: "reference/openapi.json" })
   docsPathCollision() {
     collisionHandlerCalls++;
     return { from: "route" };
   }
 
-  @HttpGet("health")
+  @HttpGet({ path: "health" })
   health() {
     return { healthy: true };
   }

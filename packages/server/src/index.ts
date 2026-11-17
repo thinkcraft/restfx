@@ -26,6 +26,16 @@ export type {
 export { HttpResource } from "./decorators/HttpResource.js";
 export { HttpMiddleware } from "./decorators/HttpMiddleware.js";
 export { OpenApiMiddleware } from "./decorators/OpenApiMiddleware.js";
+export {
+  Body,
+  HeaderParam,
+  PathParam,
+  QueryParam,
+} from "./decorators/RequestModelField.js";
+export type {
+  HttpBodyFieldOptions,
+  HttpRequestFieldOptions,
+} from "./decorators/RequestModelField.js";
 export type { HttpMiddlewareHandler } from "./metadata/ResourceMetadata.js";
 export {
   HttpDelete,

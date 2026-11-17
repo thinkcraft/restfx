@@ -18,6 +18,7 @@ export interface HttpHandlerMetadata {
   readonly path?: string;
   readonly name: string | symbol;
   readonly bodyModel?: ModelConstructor;
+  readonly requestModel?: ModelConstructor;
   readonly responseModel?: ModelConstructor;
   readonly operation?: HttpOperationOptions;
   readonly requestBody?: HttpRequestBodyOptions;

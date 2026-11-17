@@ -7,26 +7,28 @@ import type {
 } from "../openapi/types.js";
 
 export interface HttpRouteOptions extends HttpOperationOptions {
+  readonly path?: string;
   readonly body?: ModelConstructor;
+  readonly request?: ModelConstructor;
   readonly response?: ModelConstructor;
   readonly requestBody?: HttpRequestBodyOptions;
   readonly responses?: Readonly<Record<string, HttpResponseOptions>>;
   readonly operation?: HttpOperationOptions;
 }
 
-export function HttpMethod(
-  method: string,
-  path?: string,
-  options: HttpRouteOptions = {},
-) {
+export function HttpMethod(method: string, options: HttpRouteOptions = {}) {
+  if (options.body && options.request) {
+    throw new TypeError('Use either "body" or "request", not both');
+  }
   const normalizedMethod = method.toUpperCase();
 
   return (value: Function, context: ClassMethodDecoratorContext) => {
     registerHandler(value, {
       method: normalizedMethod,
-      path,
+      path: options.path,
       name: context.name,
       bodyModel: options.body,
+      requestModel: options.request,
       responseModel: options.response,
       operation: {
         summary: options.summary,
@@ -44,13 +46,13 @@ export function HttpMethod(
   };
 }
 
-export const HttpGet = (path?: string, options?: HttpRouteOptions) =>
-  HttpMethod("GET", path, options);
-export const HttpPost = (path?: string, options?: HttpRouteOptions) =>
-  HttpMethod("POST", path, options);
-export const HttpPut = (path?: string, options?: HttpRouteOptions) =>
-  HttpMethod("PUT", path, options);
-export const HttpPatch = (path?: string, options?: HttpRouteOptions) =>
-  HttpMethod("PATCH", path, options);
-export const HttpDelete = (path?: string, options?: HttpRouteOptions) =>
-  HttpMethod("DELETE", path, options);
+export const HttpGet = (options?: HttpRouteOptions) =>
+  HttpMethod("GET", options);
+export const HttpPost = (options?: HttpRouteOptions) =>
+  HttpMethod("POST", options);
+export const HttpPut = (options?: HttpRouteOptions) =>
+  HttpMethod("PUT", options);
+export const HttpPatch = (options?: HttpRouteOptions) =>
+  HttpMethod("PATCH", options);
+export const HttpDelete = (options?: HttpRouteOptions) =>
+  HttpMethod("DELETE", options);

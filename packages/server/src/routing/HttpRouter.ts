@@ -17,7 +17,12 @@ import { getPathSpecificity } from "./getPathSpecificity.js";
 import { HttpStatusCode } from "../HttpStatusCode.js";
 import { HttpResult } from "../HttpResult.js";
 import { HttpHeaderName } from "../HttpHeaderName.js";
-import { validateModel } from "@framework/core";
+import {
+  getModelMetadata,
+  validateModel,
+  type ModelConstructor,
+} from "@framework/core";
+import { getRequestModelMetadata } from "../request/RequestModelMetadata.js";
 
 /** Discovers decorated resources and dispatches contexts to matching handlers. */
 export class HttpRouter {
@@ -120,7 +125,9 @@ export class HttpRouter {
 
     context.req.params = match.params;
     const invokeHandler = async () => {
-      if (match.route.bodyModel) {
+      if (match.route.requestModel) {
+        await context.req.model(match.route.requestModel);
+      } else if (match.route.bodyModel) {
         await context.req.parseBody({ model: match.route.bodyModel });
       }
       return await match.route.handler.call(match.route.resource, context);
@@ -213,6 +220,9 @@ export class HttpRouter {
 
       for (const [handler, handlerMetadata] of getResourceHandlers(resource)) {
         const path = joinPaths(basePath, handlerMetadata.path);
+        if (handlerMetadata.requestModel) {
+          validateRequestModelRoute(handlerMetadata.requestModel, path);
+        }
         routes.push({
           method: handlerMetadata.method,
           path,
@@ -222,6 +232,7 @@ export class HttpRouter {
           name: handlerMetadata.name,
           middlewares,
           bodyModel: handlerMetadata.bodyModel,
+          requestModel: handlerMetadata.requestModel,
           responseModel: handlerMetadata.responseModel,
           operation: handlerMetadata.operation,
           requestBody: handlerMetadata.requestBody,
@@ -229,7 +240,50 @@ export class HttpRouter {
         });
       }
 
-      for (const child of metadata?.children ?? []) {
+      const children = [...(metadata?.children ?? [])];
+      const addDecoratedChildren = (
+        owner: Record<PropertyKey, unknown>,
+        isStatic: boolean,
+      ) => {
+        for (const key of Reflect.ownKeys(owner)) {
+          if (
+            isStatic &&
+            (key === "prototype" || key === "name" || key === "length")
+          ) {
+            continue;
+          }
+          if (
+            children.some(
+              (child) => child.key === key && child.isStatic === isStatic,
+            )
+          ) {
+            continue;
+          }
+          const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+          if (!descriptor || !("value" in descriptor)) continue;
+          const value = descriptor.value;
+          const childConstructor =
+            typeof value === "function"
+              ? value
+              : value !== null && typeof value === "object"
+                ? value.constructor
+                : undefined;
+          if (
+            typeof childConstructor !== "function" ||
+            !getResourceMetadata(childConstructor)
+          ) {
+            continue;
+          }
+          children.push({ key, isStatic });
+        }
+      };
+      addDecoratedChildren(resource as Record<PropertyKey, unknown>, false);
+      addDecoratedChildren(
+        constructor as unknown as Record<PropertyKey, unknown>,
+        true,
+      );
+
+      for (const child of children) {
         const owner = child.isStatic
           ? (constructor as unknown as Record<PropertyKey, unknown>)
           : (resource as Record<PropertyKey, unknown>);
@@ -268,5 +322,51 @@ export class HttpRouter {
     }
 
     return routes;
+  }
+}
+
+function validateRequestModelRoute(model: ModelConstructor, path: string) {
+  const modelMetadata = getModelMetadata(model);
+  if (!modelMetadata) {
+    throw new TypeError(
+      `${model.name || "Model"} is not decorated with @Model`,
+    );
+  }
+  const requestMetadata = getRequestModelMetadata(model);
+  const pathParameters = new Set(
+    path
+      .split("/")
+      .filter((segment) => segment.startsWith(":"))
+      .map((segment) => segment.slice(1).replace(/[?*]$/, "")),
+  );
+  for (const field of requestMetadata.fields) {
+    if (!modelMetadata.fields.has(field.property)) {
+      throw new TypeError(
+        `Request source field ${field.property} is missing @Field metadata`,
+      );
+    }
+    if (
+      field.source === "path" &&
+      !pathParameters.has(field.name ?? field.property)
+    ) {
+      throw new TypeError(
+        `Path parameter ${field.name ?? field.property} from ${model.name || "request model"} is not present in route ${path}`,
+      );
+    }
+  }
+  if (requestMetadata.body) {
+    if (modelMetadata.fields.has(requestMetadata.body.property)) {
+      throw new TypeError(
+        `@Body field ${requestMetadata.body.property} must not also use @Field`,
+      );
+    }
+    if (
+      !requestMetadata.body.model ||
+      !getModelMetadata(requestMetadata.body.model)
+    ) {
+      throw new TypeError(
+        `@Body field ${requestMetadata.body.property} must use a class decorated with @Model`,
+      );
+    }
   }
 }

@@ -14,6 +14,7 @@ export interface Route {
   readonly name?: string | symbol;
   readonly middlewares: readonly RouteMiddleware[];
   readonly bodyModel?: ModelConstructor;
+  readonly requestModel?: ModelConstructor;
   readonly responseModel?: ModelConstructor;
   readonly operation?: HttpOperationOptions;
   readonly requestBody?: HttpRequestBodyOptions;
