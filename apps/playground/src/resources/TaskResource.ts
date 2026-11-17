@@ -18,13 +18,12 @@ export class TaskResource {
 
   @HttpGet({
     summary: "Get a task",
-    operationId: "getTask",
     tags: ["Tasks"],
     request: TaskPathRequest,
     response: TaskResponse,
     responses: { "404": { description: "Task not found" } },
   })
-  async get(context: HttpContext) {
+  async getTask(context: HttpContext) {
     const request = await context.req.model(TaskPathRequest);
     return (
       this.tasks.get(request.workspaceId, request.projectId, request.taskId) ??
@@ -34,13 +33,12 @@ export class TaskResource {
 
   @HttpPatch({
     summary: "Update a task",
-    operationId: "updateTask",
     tags: ["Tasks"],
     request: UpdateTaskRequest,
     response: TaskResponse,
     responses: { "404": { description: "Task not found" } },
   })
-  async update(context: HttpContext) {
+  async updateTask(context: HttpContext) {
     const request = await context.req.model(UpdateTaskRequest);
     return this.tasks.update(request) ?? new HttpResult(404);
   }

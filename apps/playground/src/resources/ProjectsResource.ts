@@ -22,7 +22,6 @@ export class ProjectsResource {
     summary: "Search workspace projects",
     description:
       "Filter projects by status or name. Repeated status parameters are accepted.",
-    operationId: "listProjects",
     tags: ["Projects"],
     request: ListProjectsRequest,
     response: ListProjectsResponse,
@@ -32,14 +31,13 @@ export class ProjectsResource {
       },
     },
   })
-  async list(context: HttpContext) {
+  async listProjects(context: HttpContext) {
     const request = await context.req.model(ListProjectsRequest);
     return this.projects.list(request) ?? new HttpResult(404);
   }
 
   @HttpPost({
     summary: "Create a project",
-    operationId: "createProject",
     tags: ["Projects"],
     request: CreateProjectRequest,
     response: ProjectResponse,
@@ -49,7 +47,7 @@ export class ProjectsResource {
       "409": { description: "A project with this name already exists" },
     },
   })
-  async create(context: HttpContext) {
+  async createProject(context: HttpContext) {
     const request = await context.req.model(CreateProjectRequest);
     const project = this.projects.create(request);
     if (project === undefined) return new HttpResult(404);

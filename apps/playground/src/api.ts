@@ -23,10 +23,9 @@ import { WorkspacesResource } from "./resources/index.js";
 export class PlaygroundApi {
   @HttpGet({
     summary: "Playground API overview",
-    operationId: "getPlaygroundInfo",
     tags: ["Meta"],
   })
-  info() {
+  getPlaygroundInfo() {
     return {
       name: "Northstar Project Platform API",
       version: "1.0.0",
@@ -39,10 +38,9 @@ export class PlaygroundApi {
   @HttpGet({
     path: "health",
     summary: "Check API health",
-    operationId: "getHealth",
     tags: ["Meta"],
   })
-  health() {
+  getHealth() {
     return { healthy: true, timestamp: new Date().toISOString() };
   }
 

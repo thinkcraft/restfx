@@ -20,13 +20,12 @@ export class ProjectResource {
 
   @HttpGet({
     summary: "Get a project",
-    operationId: "getProject",
     tags: ["Projects"],
     request: ProjectPathRequest,
     response: ProjectResponse,
     responses: { "404": { description: "Project not found" } },
   })
-  async get(context: HttpContext) {
+  async getProject(context: HttpContext) {
     const { workspaceId, projectId: requestedId } =
       await context.req.model(ProjectPathRequest);
     return this.projects.get(workspaceId, requestedId) ?? new HttpResult(404);
@@ -34,20 +33,18 @@ export class ProjectResource {
 
   @HttpPatch({
     summary: "Update a project",
-    operationId: "updateProject",
     tags: ["Projects"],
     request: UpdateProjectRequest,
     response: ProjectResponse,
     responses: { "404": { description: "Project not found" } },
   })
-  async update(context: HttpContext) {
+  async updateProject(context: HttpContext) {
     const request = await context.req.model(UpdateProjectRequest);
     return this.projects.update(request) ?? new HttpResult(404);
   }
 
   @HttpDelete({
     summary: "Archive a project",
-    operationId: "archiveProject",
     tags: ["Projects"],
     request: ProjectPathRequest,
     responses: {
@@ -55,7 +52,7 @@ export class ProjectResource {
       "404": { description: "Project not found" },
     },
   })
-  async archive(context: HttpContext) {
+  async archiveProject(context: HttpContext) {
     const request = await context.req.model(ProjectPathRequest);
     const project = this.projects.archive(
       request.workspaceId,

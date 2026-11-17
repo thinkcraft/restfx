@@ -19,7 +19,6 @@ export class TasksResource {
 
   @HttpGet({
     summary: "List project tasks",
-    operationId: "listTasks",
     tags: ["Tasks"],
     request: ListTasksRequest,
     response: { arrayOf: TaskResponse },
@@ -30,14 +29,13 @@ export class TasksResource {
       "404": { description: "Project not found" },
     },
   })
-  async list(context: HttpContext) {
+  async listTasks(context: HttpContext) {
     const request = await context.req.model(ListTasksRequest);
     return this.tasks.list(request) ?? new HttpResult(404);
   }
 
   @HttpPost({
     summary: "Create a task",
-    operationId: "createTask",
     tags: ["Tasks"],
     request: CreateTaskRequest,
     response: TaskResponse,
@@ -46,7 +44,7 @@ export class TasksResource {
       "404": { description: "Project not found" },
     },
   })
-  async create(context: HttpContext) {
+  async createTask(context: HttpContext) {
     const request = await context.req.model(CreateTaskRequest);
     const task = this.tasks.create(request);
     if (!task) return new HttpResult(404);

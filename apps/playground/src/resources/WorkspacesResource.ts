@@ -16,7 +16,6 @@ export class WorkspacesResource {
 
   @HttpGet({
     summary: "List workspaces",
-    operationId: "listWorkspaces",
     tags: ["Workspaces"],
     response: { arrayOf: WorkspaceResponse },
     responses: {
@@ -25,20 +24,19 @@ export class WorkspacesResource {
       },
     },
   })
-  list() {
+  listWorkspaces() {
     return this.workspaces.list();
   }
 
   @HttpGet({
     path: ":workspaceId",
     summary: "Get a workspace",
-    operationId: "getWorkspace",
     tags: ["Workspaces"],
     responses: {
       "404": { description: "Workspace not found" },
     },
   })
-  get(context: HttpContext) {
+  getWorkspace(context: HttpContext) {
     return (
       this.workspaces.get(context.req.params.workspaceId) ?? new HttpResult(404)
     );
