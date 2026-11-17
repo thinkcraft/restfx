@@ -59,7 +59,9 @@ See the package guides below for the exact APIs, supported behavior, and example
 
 ## Guides
 
-- [Documentation site](apps/docs/README.md) — run and build the Starlight site.
+- [Documentation site](https://thinkcraft.github.io/restfx/) — guides and API
+  reference. See the [docs app README](apps/docs/README.md) to run and build the
+  Starlight site locally.
 - [Core models and validation](packages/core/README.md) — define shared models,
   field constraints, nested models, and cross-field validation.
 - [HTTP server](packages/server/README.md) — routes, middleware, request
