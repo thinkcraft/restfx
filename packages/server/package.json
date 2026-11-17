@@ -18,7 +18,8 @@
     "test": "node --import tsx --test ./test",
     "typecheck": "tsc -b --pretty false",
     "bench:routing": "node --import tsx ./bench/routing.bench.ts",
-    "bench:http": "node --import tsx ./bench/http.bench.ts --concurrency 4"
+    "bench:http": "node --import tsx ./bench/http.bench.ts --concurrency 4",
+    "profile:http": "node --import tsx ./bench/http.profile.ts"
   },
   "dependencies": {
     "@framework/core": "workspace:*"
