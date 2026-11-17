@@ -74,6 +74,79 @@ function appendQuery(searchParams: URLSearchParams, name: string, value: unknown
     searchParams.append(name, String(value));
   }
 }
+
+function toFormData(value: unknown): FormData {
+  if (value instanceof FormData) return value;
+  if (!value || typeof value !== "object") {
+    throw new TypeError("multipart/form-data body must be an object or FormData");
+  }
+  const form = new FormData();
+  for (const [name, raw] of Object.entries(value)) {
+    const values = Array.isArray(raw) ? raw : [raw];
+    for (const item of values) {
+      if (item === undefined || item === null) continue;
+      if (item instanceof Blob) {
+        form.append(name, item);
+      } else if (typeof item === "object") {
+        form.append(name, JSON.stringify(item));
+      } else {
+        form.append(name, String(item));
+      }
+    }
+  }
+  return form;
+}
+
+function toUrlSearchParams(value: unknown): URLSearchParams {
+  if (value instanceof URLSearchParams) return value;
+  if (!value || typeof value !== "object") {
+    throw new TypeError("URL-encoded body must be an object or URLSearchParams");
+  }
+  const params = new URLSearchParams();
+  for (const [name, raw] of Object.entries(value)) {
+    const values = Array.isArray(raw) ? raw : [raw];
+    for (const item of values) {
+      if (item === undefined || item === null) continue;
+      params.append(
+        name,
+        typeof item === "object" ? JSON.stringify(item) : String(item),
+      );
+    }
+  }
+  return params;
+}
+
+async function readResponseBody(
+  response: Response,
+  fallbackContentType = "",
+): Promise<unknown> {
+  if (!response.body) return undefined;
+  const contentType = (
+    response.headers.get("content-type") ?? fallbackContentType
+  )
+    .split(";")[0]!
+    .trim()
+    .toLowerCase();
+  if (contentType === "application/json" || contentType.endsWith("+json")) {
+    return await response.json();
+  }
+  if (
+    contentType.startsWith("text/") ||
+    contentType === "application/xml" ||
+    contentType.endsWith("+xml") ||
+    contentType === "application/javascript" ||
+    contentType === "application/ecmascript"
+  ) {
+    return await response.text();
+  }
+  if (contentType === "application/x-www-form-urlencoded") {
+    return new URLSearchParams(await response.text());
+  }
+  if (contentType.startsWith("multipart/form-data")) {
+    return await response.formData();
+  }
+  return await response.blob();
+}
 `;
 }
 
@@ -236,11 +309,6 @@ function generateOperation(
   const requestContentType = requestContent
     ? Object.keys(requestContent)[0]
     : undefined;
-  if (requestContentType && !isJsonContentType(requestContentType)) {
-    throw new TypeError(
-      `${method} ${path} uses unsupported request content type ${requestContentType}; the generated client currently supports JSON bodies`,
-    );
-  }
   const requestSchema = requestContentType
     ? requestContent[requestContentType]?.schema
     : undefined;
@@ -254,6 +322,7 @@ function generateOperation(
     inputType = createInputType(
       parameters,
       requestBody,
+      requestContentType,
       bodyModel,
       requestSchema,
       schemas,
@@ -264,8 +333,12 @@ function generateOperation(
 
   const responseType = getResponseType(
     operation.responses ?? {},
+    schemas,
     modelAliases,
     imports,
+  );
+  const responseContentTypes = getSuccessfulResponseContentTypes(
+    operation.responses ?? {},
   );
   const lines: string[] = [];
   lines.push(
@@ -280,12 +353,18 @@ function generateOperation(
       );
     }
     if (bodyModel) {
-      lines.push(
-        `  const serializedBodyInput = JSON.stringify(Reflect.get(input, ${JSON.stringify(bodyProperty)}));`,
-      );
-      lines.push(
-        "  const bodyInput = serializedBodyInput === undefined ? undefined : JSON.parse(serializedBodyInput);",
-      );
+      if (isJsonContentType(requestContentType)) {
+        lines.push(
+          `  const serializedBodyInput = JSON.stringify(Reflect.get(input, ${JSON.stringify(bodyProperty)}));`,
+        );
+        lines.push(
+          "  const bodyInput = serializedBodyInput === undefined ? undefined : JSON.parse(serializedBodyInput);",
+        );
+      } else {
+        lines.push(
+          `  const bodyInput = Reflect.get(input, ${JSON.stringify(bodyProperty)});`,
+        );
+      }
       lines.push(
         `  if (Object.hasOwn(input, ${JSON.stringify(bodyProperty)})) requestInput[${JSON.stringify(bodyProperty)}] = bodyInput;`,
       );
@@ -298,10 +377,14 @@ function generateOperation(
     if (requestModel) {
       lines.push(`  const body = request[${JSON.stringify(bodyProperty)}];`);
     } else {
-      lines.push("  const serializedBodyInput = JSON.stringify(input.body);");
-      lines.push(
-        "  const bodyInput = serializedBodyInput === undefined ? undefined : JSON.parse(serializedBodyInput);",
-      );
+      if (isJsonContentType(requestContentType)) {
+        lines.push("  const serializedBodyInput = JSON.stringify(input.body);");
+        lines.push(
+          "  const bodyInput = serializedBodyInput === undefined ? undefined : JSON.parse(serializedBodyInput);",
+        );
+      } else {
+        lines.push("  const bodyInput = input.body;");
+      }
       lines.push(`  const body = validateModel(bodyInput, ${bodyModel});`);
     }
   }
@@ -335,23 +418,26 @@ function generateOperation(
     );
   }
   if (requestContentType) {
-    lines.push(
-      `  headers.set("content-type", ${JSON.stringify(requestContentType)});`,
-    );
+    if (isMultipartContentType(requestContentType)) {
+      lines.push('  headers.delete("content-type");');
+    } else {
+      lines.push(
+        `  headers.set("content-type", ${JSON.stringify(requestContentType)});`,
+      );
+    }
   }
 
-  const bodyExpression = bodyModel
-    ? "JSON.stringify(body)"
-    : requestBody
-      ? "JSON.stringify(input.body)"
-      : undefined;
+  const requestBodyValue = bodyModel ? "body" : "input.body";
+  const bodyExpression = requestBody
+    ? serializeRequestBody(requestBodyValue, requestContentType)
+    : undefined;
   lines.push(
     `  const response = await client.request(url.toString(), { method: ${JSON.stringify(method)}, headers${bodyExpression ? `, body: ${bodyExpression}` : ""} });`,
   );
   lines.push("  if (!response.ok) {");
   lines.push("    let errorBody: unknown;");
   lines.push(
-    "    try { errorBody = await response.json(); } catch { errorBody = undefined; }",
+    "    try { errorBody = await readResponseBody(response); } catch { errorBody = undefined; }",
   );
   lines.push("    throw new ApiError(response.status, errorBody);");
   lines.push("  }");
@@ -374,7 +460,9 @@ function generateOperation(
         lines.push(`  if (${checks.join(" || ")}) return undefined;`);
       }
     }
-    lines.push("  return await response.json() as " + responseType + ";");
+    lines.push(
+      `  return await readResponseBody(response, ${JSON.stringify(responseContentTypes[0] ?? "")}) as ${responseType};`,
+    );
   }
   lines.push("}");
   return lines.join("\n");
@@ -383,6 +471,7 @@ function generateOperation(
 function createInputType(
   parameters: JsonObject[],
   requestBody: JsonObject | undefined,
+  requestContentType: string | undefined,
   bodyModel: string | undefined,
   bodySchema: JsonObject | undefined,
   schemas: Record<string, JsonObject>,
@@ -404,9 +493,16 @@ function createInputType(
     properties.push(`${group}${required ? "" : "?"}: { ${fields.join("; ")} }`);
   }
   if (requestBody) {
-    const type =
+    let type =
       bodyModel ??
       schemaToType(bodySchema ?? {}, schemas, modelAliases, imports);
+    if (isMultipartContentType(requestContentType)) {
+      type = `(${type}) | FormData`;
+    } else if (isUrlEncodedContentType(requestContentType)) {
+      type = `(${type}) | URLSearchParams`;
+    } else if (isBinaryContentType(requestContentType)) {
+      type = "Blob | ArrayBuffer | ArrayBufferView";
+    }
     properties.push(
       `body${requestBody.required === false ? "?" : ""}: ${type}`,
     );
@@ -416,6 +512,7 @@ function createInputType(
 
 function getResponseType(
   responses: Record<string, JsonObject>,
+  schemas: Record<string, JsonObject>,
   modelAliases: Map<string, string>,
   imports: Set<string>,
 ) {
@@ -423,23 +520,57 @@ function getResponseType(
     /^(?:2\d\d|2XX)$/.test(status),
   );
   if (!successful.length) return "void";
-  const types = successful.map(([, response]) => {
+  const types = successful.flatMap(([, response]) => {
     const content = response.content;
-    if (!content) return "void";
-    const contentType = Object.keys(content)[0];
-    if (!contentType || !isJsonContentType(contentType)) {
-      throw new TypeError(
-        `Unsupported successful response content type ${contentType ?? "(empty)"}`,
-      );
-    }
-    return schemaToType(
-      content[contentType]?.schema ?? {},
-      {},
-      modelAliases,
-      imports,
+    if (!content) return ["void"];
+    return Object.entries<JsonObject>(content).map(([contentType, media]) =>
+      responseMediaTypeToType(
+        contentType,
+        media?.schema ?? {},
+        schemas,
+        modelAliases,
+        imports,
+      ),
     );
   });
   return [...new Set(types)].join(" | ");
+}
+
+function getSuccessfulResponseContentTypes(
+  responses: Record<string, JsonObject>,
+) {
+  return Object.entries<JsonObject>(responses)
+    .filter(([status]) => /^(?:2\d\d|2XX)$/.test(status))
+    .flatMap(([, response]) => Object.keys(response.content ?? {}));
+}
+
+function responseMediaTypeToType(
+  contentType: string,
+  schema: JsonObject,
+  schemas: Record<string, JsonObject>,
+  modelAliases: Map<string, string>,
+  imports: Set<string>,
+) {
+  if (isJsonContentType(contentType)) {
+    return schemaToType(schema, schemas, modelAliases, imports);
+  }
+  if (isTextContentType(contentType)) return "string";
+  if (isUrlEncodedContentType(contentType)) return "URLSearchParams";
+  if (isMultipartContentType(contentType)) return "FormData";
+  return "Blob";
+}
+
+function serializeRequestBody(value: string, contentType: string | undefined) {
+  if (!contentType || isJsonContentType(contentType)) {
+    return `JSON.stringify(${value})`;
+  }
+  if (isMultipartContentType(contentType)) {
+    return `toFormData(${value})`;
+  }
+  if (isUrlEncodedContentType(contentType)) {
+    return `toUrlSearchParams(${value})`;
+  }
+  return `(${value} as BodyInit)`;
 }
 
 function schemaToType(
@@ -448,6 +579,7 @@ function schemaToType(
   modelAliases: Map<string, string>,
   imports: Set<string>,
 ): string {
+  if (schema.format === "binary") return "Blob";
   if (schema.$ref) {
     const alias = modelAliases.get(schema.$ref);
     if (alias) {
@@ -616,8 +748,45 @@ function escapeTemplateLiteral(value: string) {
     .replaceAll("${", "\\${");
 }
 
-function isJsonContentType(contentType: string) {
-  return contentType === "application/json" || contentType.includes("+json");
+function isJsonContentType(contentType: string | undefined) {
+  return Boolean(
+    contentType &&
+    (contentType.toLowerCase().split(";")[0] === "application/json" ||
+      contentType.toLowerCase().split(";")[0]?.endsWith("+json")),
+  );
+}
+
+function isMultipartContentType(contentType: string | undefined) {
+  return contentType?.toLowerCase().startsWith("multipart/form-data") ?? false;
+}
+
+function isUrlEncodedContentType(contentType: string | undefined) {
+  return (
+    contentType
+      ?.toLowerCase()
+      .startsWith("application/x-www-form-urlencoded") ?? false
+  );
+}
+
+function isBinaryContentType(contentType: string | undefined) {
+  return Boolean(
+    contentType &&
+    !isJsonContentType(contentType) &&
+    !isMultipartContentType(contentType) &&
+    !isUrlEncodedContentType(contentType) &&
+    !isTextContentType(contentType),
+  );
+}
+
+function isTextContentType(contentType: string) {
+  const normalized = contentType.toLowerCase().split(";")[0] ?? "";
+  return (
+    normalized.startsWith("text/") ||
+    normalized === "application/xml" ||
+    normalized.endsWith("+xml") ||
+    normalized === "application/javascript" ||
+    normalized === "application/ecmascript"
+  );
 }
 
 function indent(value: string, spaces: number) {

@@ -42,8 +42,16 @@ const api = createApiClient({
 const record = await api.records.create({ id, payload: { name: "Example" } });
 ```
 
-The generator currently supports JSON request/response bodies and path, query,
-and header parameters. It rejects cookie parameters and non-JSON bodies rather
-than generating a client that would serialize them incorrectly. Model
-validation errors are thrown before the fetch call; non-2xx HTTP responses
-throw the generated `ApiError` with the status and parsed response body.
+The generator supports JSON, `multipart/form-data`,
+`application/x-www-form-urlencoded`, text, and binary request and response
+bodies, as well as path, query, and header parameters. Multipart and URL-encoded
+object bodies are serialized from their typed properties; you can also pass
+`FormData` or `URLSearchParams` directly. Multipart requests leave the
+`Content-Type` header unset so `fetch` can add its boundary. Binary request
+bodies accept `Blob`, `ArrayBuffer`, or `ArrayBufferView`; binary responses are
+returned as `Blob`s. Text responses are returned as strings, URL-encoded
+responses as `URLSearchParams`, and JSON responses are parsed as JSON. For
+operations that declare more than one request media type, the generator uses
+the first media type in the OpenAPI document. Model validation errors are
+thrown before the fetch call; non-2xx HTTP responses throw the generated
+`ApiError` with the status and parsed response body.

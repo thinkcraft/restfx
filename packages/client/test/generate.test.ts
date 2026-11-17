@@ -154,4 +154,211 @@ describe("API client generator", () => {
       /not represented by its request model/,
     );
   });
+
+  it("serializes form and binary requests and decodes non-JSON responses", async () => {
+    const document = {
+      openapi: "3.1.0",
+      info: { title: "Content types", version: "1" },
+      paths: {
+        "/uploads": {
+          post: {
+            operationId: "createUpload",
+            requestBody: {
+              required: true,
+              content: {
+                "multipart/form-data": {
+                  schema: {
+                    type: "object",
+                    required: ["title", "file"],
+                    properties: {
+                      title: { type: "string" },
+                      file: { type: "string", format: "binary" },
+                      tags: { type: "array", items: { type: "string" } },
+                    },
+                  },
+                },
+              },
+            },
+            responses: {
+              "201": {
+                description: "Created file",
+                content: {
+                  "application/octet-stream": {
+                    schema: { type: "string", format: "binary" },
+                  },
+                },
+              },
+            },
+          },
+        },
+        "/forms": {
+          post: {
+            operationId: "submitForm",
+            requestBody: {
+              required: true,
+              content: {
+                "application/x-www-form-urlencoded": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      search: { type: "string" },
+                      tags: { type: "array", items: { type: "string" } },
+                    },
+                  },
+                },
+              },
+            },
+            responses: {
+              "200": {
+                description: "Accepted",
+                content: { "text/plain": { schema: { type: "string" } } },
+              },
+            },
+          },
+        },
+        "/raw": {
+          post: {
+            operationId: "uploadRaw",
+            requestBody: {
+              required: true,
+              content: {
+                "application/octet-stream": {
+                  schema: { type: "string", format: "binary" },
+                },
+              },
+            },
+            responses: {
+              "200": {
+                description: "Echo",
+                content: {
+                  "application/octet-stream": {
+                    schema: { type: "string", format: "binary" },
+                  },
+                },
+              },
+            },
+          },
+        },
+        "/xml": {
+          post: {
+            operationId: "sendXml",
+            requestBody: {
+              required: true,
+              content: {
+                "application/xml": { schema: { type: "string" } },
+              },
+            },
+            responses: {
+              "200": {
+                description: "XML response",
+                content: { "application/xml": { schema: { type: "string" } } },
+              },
+            },
+          },
+        },
+      },
+    };
+    const generatedPath = new URL(
+      "./.generated-content-client.test.ts",
+      import.meta.url,
+    );
+    await writeFile(
+      generatedPath,
+      generateClient(document, { models: "./models.js" }),
+      "utf8",
+    );
+
+    try {
+      const generatedClient = await import(
+        generatedPath.href + `?v=${Date.now()}`
+      );
+      const requests: RequestInit[] = [];
+      const api = generatedClient.createApiClient({
+        baseUrl: "http://example.test",
+        fetch: async (_input: URL | RequestInfo, init?: RequestInit) => {
+          requests.push(init ?? {});
+          if (
+            init?.headers &&
+            new Headers(init.headers).get("content-type") ===
+              "application/octet-stream"
+          ) {
+            return new Response(new Blob(["download"]), {
+              status: 200,
+              headers: { "content-type": "application/octet-stream" },
+            });
+          }
+          if (
+            init?.headers &&
+            new Headers(init.headers).get("content-type") ===
+              "application/x-www-form-urlencoded"
+          ) {
+            return new Response("received", {
+              status: 200,
+              headers: { "content-type": "text/plain" },
+            });
+          }
+          if (
+            init?.headers &&
+            new Headers(init.headers).get("content-type") === "application/xml"
+          ) {
+            return new Response("<result>ok</result>", {
+              status: 200,
+              headers: { "content-type": "application/xml" },
+            });
+          }
+          return new Response(new Blob(["stored"]), {
+            status: 201,
+            headers: { "content-type": "application/octet-stream" },
+          });
+        },
+      });
+
+      const upload = await api.uploads.create({
+        body: {
+          title: "report",
+          file: new Blob(["file bytes"], { type: "text/plain" }),
+          tags: ["one", "two"],
+        },
+      });
+      assert.ok(upload instanceof Blob);
+      const multipart = requests[0]!.body as FormData;
+      assert.ok(multipart instanceof FormData);
+      assert.equal(multipart.get("title"), "report");
+      assert.equal((multipart.get("file") as Blob).size, 10);
+      assert.deepEqual(multipart.getAll("tags"), ["one", "two"]);
+      assert.equal(
+        new Headers(requests[0]!.headers).has("content-type"),
+        false,
+      );
+
+      const formResponse = await api.forms.create({
+        body: { search: "term", tags: ["one", "two"] },
+      });
+      assert.equal(formResponse, "received");
+      const urlEncoded = requests[1]!.body as URLSearchParams;
+      assert.ok(urlEncoded instanceof URLSearchParams);
+      assert.equal(urlEncoded.get("search"), "term");
+      assert.deepEqual(urlEncoded.getAll("tags"), ["one", "two"]);
+
+      const binaryResponse = await api.raw.create({
+        body: new Uint8Array([1, 2, 3]),
+      });
+      assert.ok(binaryResponse instanceof Blob);
+      assert.deepEqual(
+        [...new Uint8Array(await binaryResponse.arrayBuffer())],
+        [...new Uint8Array(await new Blob(["download"]).arrayBuffer())],
+      );
+      assert.ok(requests[2]!.body instanceof Uint8Array);
+      assert.equal(
+        new Headers(requests[2]!.headers).get("content-type"),
+        "application/octet-stream",
+      );
+
+      const xmlResponse = await api.xml.create({ body: "<input />" });
+      assert.equal(xmlResponse, "<result>ok</result>");
+      assert.equal(requests[3]!.body, "<input />");
+    } finally {
+      await unlink(generatedPath).catch(() => undefined);
+    }
+  });
 });
