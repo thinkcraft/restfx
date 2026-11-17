@@ -39,7 +39,7 @@ const api = createApiClient({
   headers: { authorization: `Bearer ${token}` },
 });
 
-const record = await api.createRecord({ id, payload: { name: "Example" } });
+const record = await api.records.create({ id, payload: { name: "Example" } });
 ```
 
 The generator currently supports JSON request/response bodies and path, query,

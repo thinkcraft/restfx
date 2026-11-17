@@ -53,435 +53,495 @@ export function createApiClient(options: ClientOptions = {}) {
       }
       return undefined;
     },
-    getHealth: async (): Promise<void> => {
-      const url = new URL(
-        `/health`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      const headers = new Headers(options.headers);
-      const response = await client.request(url.toString(), {
-        method: "GET",
-        headers,
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
-        }
-        throw new ApiError(response.status, errorBody);
-      }
-      return undefined;
-    },
-    listWorkspaces: async (): Promise<
-      {
-        id: string;
-        name: string;
-        plan: "free" | "team" | "enterprise";
-        region: string;
-      }[]
-    > => {
-      const url = new URL(
-        `/workspaces`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      const headers = new Headers(options.headers);
-      const response = await client.request(url.toString(), {
-        method: "GET",
-        headers,
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
-        }
-        throw new ApiError(response.status, errorBody);
-      }
-      return (await response.json()) as {
-        id: string;
-        name: string;
-        plan: "free" | "team" | "enterprise";
-        region: string;
-      }[];
-    },
-    getWorkspace: async (input: {
-      path: { workspaceId: string };
-    }): Promise<void> => {
-      const url = new URL(
-        `/workspaces/${encodeURIComponent(String(input.path?.["workspaceId"]))}`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      const headers = new Headers(options.headers);
-      const response = await client.request(url.toString(), {
-        method: "GET",
-        headers,
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
-        }
-        throw new ApiError(response.status, errorBody);
-      }
-      return undefined;
-    },
-    listProjects: async (
-      input: ListProjectsRequest,
-    ): Promise<{ items: ProjectResponse[]; total: number; limit: number }> => {
-      const requestInput: Record<string, unknown> = {};
-      if (
-        Object.hasOwn(input, "workspaceId") &&
-        input["workspaceId"] !== undefined
-      )
-        requestInput["workspaceId"] = input["workspaceId"];
-      if (Object.hasOwn(input, "search") && input["search"] !== undefined)
-        requestInput["search"] = input["search"];
-      if (Object.hasOwn(input, "statuses") && input["statuses"] !== undefined)
-        requestInput["statuses"] = input["statuses"];
-      if (Object.hasOwn(input, "limit") && input["limit"] !== undefined)
-        requestInput["limit"] = input["limit"];
-      const request = validateModel(requestInput, ListProjectsRequest);
-      const url = new URL(
-        `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      appendQuery(url.searchParams, "search", request["search"]);
-      appendQuery(url.searchParams, "status", request["statuses"]);
-      appendQuery(url.searchParams, "limit", request["limit"]);
-      const headers = new Headers(options.headers);
-      const response = await client.request(url.toString(), {
-        method: "GET",
-        headers,
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
-        }
-        throw new ApiError(response.status, errorBody);
-      }
-      return (await response.json()) as {
-        items: ProjectResponse[];
-        total: number;
-        limit: number;
-      };
-    },
-    createProject: async (
-      input: CreateProjectRequest,
-    ): Promise<ProjectResponse> => {
-      const requestInput: Record<string, unknown> = {};
-      if (
-        Object.hasOwn(input, "workspaceId") &&
-        input["workspaceId"] !== undefined
-      )
-        requestInput["workspaceId"] = input["workspaceId"];
-      if (
-        Object.hasOwn(input, "idempotencyKey") &&
-        input["idempotencyKey"] !== undefined
-      )
-        requestInput["idempotencyKey"] = input["idempotencyKey"];
-      const serializedBodyInput = JSON.stringify(Reflect.get(input, "body"));
-      const bodyInput =
-        serializedBodyInput === undefined
-          ? undefined
-          : JSON.parse(serializedBodyInput);
-      if (Object.hasOwn(input, "body")) requestInput["body"] = bodyInput;
-      const request = validateModel(requestInput, CreateProjectRequest);
-      const body = request["body"];
-      const url = new URL(
-        `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      const header_1 = request["idempotencyKey"];
-      const headers = new Headers(options.headers);
-      if (header_1 !== undefined)
-        headers.set(
-          "idempotency-key",
-          Array.isArray(header_1) ? header_1.join(",") : String(header_1),
+    health: {
+      get: async (): Promise<void> => {
+        const url = new URL(
+          `/health`,
+          options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
         );
-      headers.set("content-type", "application/json");
-      const response = await client.request(url.toString(), {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
+        const headers = new Headers(options.headers);
+        const response = await client.request(url.toString(), {
+          method: "GET",
+          headers,
+        });
+        if (!response.ok) {
+          let errorBody: unknown;
+          try {
+            errorBody = await response.json();
+          } catch {
+            errorBody = undefined;
+          }
+          throw new ApiError(response.status, errorBody);
         }
-        throw new ApiError(response.status, errorBody);
-      }
-      return (await response.json()) as ProjectResponse;
+        return undefined;
+      },
     },
-    getProject: async (input: ProjectPathRequest): Promise<ProjectResponse> => {
-      const requestInput: Record<string, unknown> = {};
-      if (
-        Object.hasOwn(input, "workspaceId") &&
-        input["workspaceId"] !== undefined
-      )
-        requestInput["workspaceId"] = input["workspaceId"];
-      if (Object.hasOwn(input, "projectId") && input["projectId"] !== undefined)
-        requestInput["projectId"] = input["projectId"];
-      const request = validateModel(requestInput, ProjectPathRequest);
-      const url = new URL(
-        `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      const headers = new Headers(options.headers);
-      const response = await client.request(url.toString(), {
-        method: "GET",
-        headers,
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
-        }
-        throw new ApiError(response.status, errorBody);
-      }
-      return (await response.json()) as ProjectResponse;
-    },
-    updateProject: async (
-      input: UpdateProjectRequest,
-    ): Promise<ProjectResponse> => {
-      const requestInput: Record<string, unknown> = {};
-      if (
-        Object.hasOwn(input, "workspaceId") &&
-        input["workspaceId"] !== undefined
-      )
-        requestInput["workspaceId"] = input["workspaceId"];
-      if (Object.hasOwn(input, "projectId") && input["projectId"] !== undefined)
-        requestInput["projectId"] = input["projectId"];
-      const serializedBodyInput = JSON.stringify(Reflect.get(input, "body"));
-      const bodyInput =
-        serializedBodyInput === undefined
-          ? undefined
-          : JSON.parse(serializedBodyInput);
-      if (Object.hasOwn(input, "body")) requestInput["body"] = bodyInput;
-      const request = validateModel(requestInput, UpdateProjectRequest);
-      const body = request["body"];
-      const url = new URL(
-        `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      const headers = new Headers(options.headers);
-      headers.set("content-type", "application/json");
-      const response = await client.request(url.toString(), {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
-        }
-        throw new ApiError(response.status, errorBody);
-      }
-      return (await response.json()) as ProjectResponse;
-    },
-    archiveProject: async (input: ProjectPathRequest): Promise<void> => {
-      const requestInput: Record<string, unknown> = {};
-      if (
-        Object.hasOwn(input, "workspaceId") &&
-        input["workspaceId"] !== undefined
-      )
-        requestInput["workspaceId"] = input["workspaceId"];
-      if (Object.hasOwn(input, "projectId") && input["projectId"] !== undefined)
-        requestInput["projectId"] = input["projectId"];
-      const request = validateModel(requestInput, ProjectPathRequest);
-      const url = new URL(
-        `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      const headers = new Headers(options.headers);
-      const response = await client.request(url.toString(), {
-        method: "DELETE",
-        headers,
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
-        }
-        throw new ApiError(response.status, errorBody);
-      }
-      return undefined;
-    },
-    listTasks: async (input: ListTasksRequest): Promise<TaskResponse[]> => {
-      const requestInput: Record<string, unknown> = {};
-      if (
-        Object.hasOwn(input, "workspaceId") &&
-        input["workspaceId"] !== undefined
-      )
-        requestInput["workspaceId"] = input["workspaceId"];
-      if (Object.hasOwn(input, "projectId") && input["projectId"] !== undefined)
-        requestInput["projectId"] = input["projectId"];
-      if (Object.hasOwn(input, "status") && input["status"] !== undefined)
-        requestInput["status"] = input["status"];
-      if (Object.hasOwn(input, "limit") && input["limit"] !== undefined)
-        requestInput["limit"] = input["limit"];
-      const request = validateModel(requestInput, ListTasksRequest);
-      const url = new URL(
-        `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}/tasks`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      appendQuery(url.searchParams, "status", request["status"]);
-      appendQuery(url.searchParams, "limit", request["limit"]);
-      const headers = new Headers(options.headers);
-      const response = await client.request(url.toString(), {
-        method: "GET",
-        headers,
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
-        }
-        throw new ApiError(response.status, errorBody);
-      }
-      return (await response.json()) as TaskResponse[];
-    },
-    createTask: async (input: CreateTaskRequest): Promise<TaskResponse> => {
-      const requestInput: Record<string, unknown> = {};
-      if (
-        Object.hasOwn(input, "workspaceId") &&
-        input["workspaceId"] !== undefined
-      )
-        requestInput["workspaceId"] = input["workspaceId"];
-      if (Object.hasOwn(input, "projectId") && input["projectId"] !== undefined)
-        requestInput["projectId"] = input["projectId"];
-      if (
-        Object.hasOwn(input, "clientVersion") &&
-        input["clientVersion"] !== undefined
-      )
-        requestInput["clientVersion"] = input["clientVersion"];
-      const serializedBodyInput = JSON.stringify(Reflect.get(input, "body"));
-      const bodyInput =
-        serializedBodyInput === undefined
-          ? undefined
-          : JSON.parse(serializedBodyInput);
-      if (Object.hasOwn(input, "body")) requestInput["body"] = bodyInput;
-      const request = validateModel(requestInput, CreateTaskRequest);
-      const body = request["body"];
-      const url = new URL(
-        `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}/tasks`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      const header_2 = request["clientVersion"];
-      const headers = new Headers(options.headers);
-      if (header_2 !== undefined)
-        headers.set(
-          "x-client-version",
-          Array.isArray(header_2) ? header_2.join(",") : String(header_2),
+    workspaces: {
+      list: async (): Promise<
+        {
+          id: string;
+          name: string;
+          plan: "free" | "team" | "enterprise";
+          region: string;
+        }[]
+      > => {
+        const url = new URL(
+          `/workspaces`,
+          options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
         );
-      headers.set("content-type", "application/json");
-      const response = await client.request(url.toString(), {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
+        const headers = new Headers(options.headers);
+        const response = await client.request(url.toString(), {
+          method: "GET",
+          headers,
+        });
+        if (!response.ok) {
+          let errorBody: unknown;
+          try {
+            errorBody = await response.json();
+          } catch {
+            errorBody = undefined;
+          }
+          throw new ApiError(response.status, errorBody);
         }
-        throw new ApiError(response.status, errorBody);
-      }
-      return (await response.json()) as TaskResponse;
-    },
-    getTask: async (input: TaskPathRequest): Promise<TaskResponse> => {
-      const requestInput: Record<string, unknown> = {};
-      if (
-        Object.hasOwn(input, "workspaceId") &&
-        input["workspaceId"] !== undefined
-      )
-        requestInput["workspaceId"] = input["workspaceId"];
-      if (Object.hasOwn(input, "projectId") && input["projectId"] !== undefined)
-        requestInput["projectId"] = input["projectId"];
-      if (Object.hasOwn(input, "taskId") && input["taskId"] !== undefined)
-        requestInput["taskId"] = input["taskId"];
-      const request = validateModel(requestInput, TaskPathRequest);
-      const url = new URL(
-        `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}/tasks/${encodeURIComponent(String(request["taskId"]))}`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      const headers = new Headers(options.headers);
-      const response = await client.request(url.toString(), {
-        method: "GET",
-        headers,
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
+        return (await response.json()) as {
+          id: string;
+          name: string;
+          plan: "free" | "team" | "enterprise";
+          region: string;
+        }[];
+      },
+      get: async (input: { path: { workspaceId: string } }): Promise<void> => {
+        const url = new URL(
+          `/workspaces/${encodeURIComponent(String(input.path?.["workspaceId"]))}`,
+          options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
+        );
+        const headers = new Headers(options.headers);
+        const response = await client.request(url.toString(), {
+          method: "GET",
+          headers,
+        });
+        if (!response.ok) {
+          let errorBody: unknown;
+          try {
+            errorBody = await response.json();
+          } catch {
+            errorBody = undefined;
+          }
+          throw new ApiError(response.status, errorBody);
         }
-        throw new ApiError(response.status, errorBody);
-      }
-      return (await response.json()) as TaskResponse;
-    },
-    updateTask: async (input: UpdateTaskRequest): Promise<TaskResponse> => {
-      const requestInput: Record<string, unknown> = {};
-      if (
-        Object.hasOwn(input, "workspaceId") &&
-        input["workspaceId"] !== undefined
-      )
-        requestInput["workspaceId"] = input["workspaceId"];
-      if (Object.hasOwn(input, "projectId") && input["projectId"] !== undefined)
-        requestInput["projectId"] = input["projectId"];
-      if (Object.hasOwn(input, "taskId") && input["taskId"] !== undefined)
-        requestInput["taskId"] = input["taskId"];
-      const serializedBodyInput = JSON.stringify(Reflect.get(input, "body"));
-      const bodyInput =
-        serializedBodyInput === undefined
-          ? undefined
-          : JSON.parse(serializedBodyInput);
-      if (Object.hasOwn(input, "body")) requestInput["body"] = bodyInput;
-      const request = validateModel(requestInput, UpdateTaskRequest);
-      const body = request["body"];
-      const url = new URL(
-        `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}/tasks/${encodeURIComponent(String(request["taskId"]))}`,
-        options.baseUrl ?? globalThis.location?.origin ?? "http://localhost",
-      );
-      const headers = new Headers(options.headers);
-      headers.set("content-type", "application/json");
-      const response = await client.request(url.toString(), {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) {
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
-        }
-        throw new ApiError(response.status, errorBody);
-      }
-      return (await response.json()) as TaskResponse;
+        return undefined;
+      },
+      projects: {
+        list: async (
+          input: ListProjectsRequest,
+        ): Promise<{
+          items: ProjectResponse[];
+          total: number;
+          limit: number;
+        }> => {
+          const requestInput: Record<string, unknown> = {};
+          if (
+            Object.hasOwn(input, "workspaceId") &&
+            input["workspaceId"] !== undefined
+          )
+            requestInput["workspaceId"] = input["workspaceId"];
+          if (Object.hasOwn(input, "search") && input["search"] !== undefined)
+            requestInput["search"] = input["search"];
+          if (
+            Object.hasOwn(input, "statuses") &&
+            input["statuses"] !== undefined
+          )
+            requestInput["statuses"] = input["statuses"];
+          if (Object.hasOwn(input, "limit") && input["limit"] !== undefined)
+            requestInput["limit"] = input["limit"];
+          const request = validateModel(requestInput, ListProjectsRequest);
+          const url = new URL(
+            `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects`,
+            options.baseUrl ??
+              globalThis.location?.origin ??
+              "http://localhost",
+          );
+          appendQuery(url.searchParams, "search", request["search"]);
+          appendQuery(url.searchParams, "status", request["statuses"]);
+          appendQuery(url.searchParams, "limit", request["limit"]);
+          const headers = new Headers(options.headers);
+          const response = await client.request(url.toString(), {
+            method: "GET",
+            headers,
+          });
+          if (!response.ok) {
+            let errorBody: unknown;
+            try {
+              errorBody = await response.json();
+            } catch {
+              errorBody = undefined;
+            }
+            throw new ApiError(response.status, errorBody);
+          }
+          return (await response.json()) as {
+            items: ProjectResponse[];
+            total: number;
+            limit: number;
+          };
+        },
+        create: async (
+          input: CreateProjectRequest,
+        ): Promise<ProjectResponse> => {
+          const requestInput: Record<string, unknown> = {};
+          if (
+            Object.hasOwn(input, "workspaceId") &&
+            input["workspaceId"] !== undefined
+          )
+            requestInput["workspaceId"] = input["workspaceId"];
+          if (
+            Object.hasOwn(input, "idempotencyKey") &&
+            input["idempotencyKey"] !== undefined
+          )
+            requestInput["idempotencyKey"] = input["idempotencyKey"];
+          const serializedBodyInput = JSON.stringify(
+            Reflect.get(input, "body"),
+          );
+          const bodyInput =
+            serializedBodyInput === undefined
+              ? undefined
+              : JSON.parse(serializedBodyInput);
+          if (Object.hasOwn(input, "body")) requestInput["body"] = bodyInput;
+          const request = validateModel(requestInput, CreateProjectRequest);
+          const body = request["body"];
+          const url = new URL(
+            `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects`,
+            options.baseUrl ??
+              globalThis.location?.origin ??
+              "http://localhost",
+          );
+          const header_1 = request["idempotencyKey"];
+          const headers = new Headers(options.headers);
+          if (header_1 !== undefined)
+            headers.set(
+              "idempotency-key",
+              Array.isArray(header_1) ? header_1.join(",") : String(header_1),
+            );
+          headers.set("content-type", "application/json");
+          const response = await client.request(url.toString(), {
+            method: "POST",
+            headers,
+            body: JSON.stringify(body),
+          });
+          if (!response.ok) {
+            let errorBody: unknown;
+            try {
+              errorBody = await response.json();
+            } catch {
+              errorBody = undefined;
+            }
+            throw new ApiError(response.status, errorBody);
+          }
+          return (await response.json()) as ProjectResponse;
+        },
+        get: async (input: ProjectPathRequest): Promise<ProjectResponse> => {
+          const requestInput: Record<string, unknown> = {};
+          if (
+            Object.hasOwn(input, "workspaceId") &&
+            input["workspaceId"] !== undefined
+          )
+            requestInput["workspaceId"] = input["workspaceId"];
+          if (
+            Object.hasOwn(input, "projectId") &&
+            input["projectId"] !== undefined
+          )
+            requestInput["projectId"] = input["projectId"];
+          const request = validateModel(requestInput, ProjectPathRequest);
+          const url = new URL(
+            `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}`,
+            options.baseUrl ??
+              globalThis.location?.origin ??
+              "http://localhost",
+          );
+          const headers = new Headers(options.headers);
+          const response = await client.request(url.toString(), {
+            method: "GET",
+            headers,
+          });
+          if (!response.ok) {
+            let errorBody: unknown;
+            try {
+              errorBody = await response.json();
+            } catch {
+              errorBody = undefined;
+            }
+            throw new ApiError(response.status, errorBody);
+          }
+          return (await response.json()) as ProjectResponse;
+        },
+        update: async (
+          input: UpdateProjectRequest,
+        ): Promise<ProjectResponse> => {
+          const requestInput: Record<string, unknown> = {};
+          if (
+            Object.hasOwn(input, "workspaceId") &&
+            input["workspaceId"] !== undefined
+          )
+            requestInput["workspaceId"] = input["workspaceId"];
+          if (
+            Object.hasOwn(input, "projectId") &&
+            input["projectId"] !== undefined
+          )
+            requestInput["projectId"] = input["projectId"];
+          const serializedBodyInput = JSON.stringify(
+            Reflect.get(input, "body"),
+          );
+          const bodyInput =
+            serializedBodyInput === undefined
+              ? undefined
+              : JSON.parse(serializedBodyInput);
+          if (Object.hasOwn(input, "body")) requestInput["body"] = bodyInput;
+          const request = validateModel(requestInput, UpdateProjectRequest);
+          const body = request["body"];
+          const url = new URL(
+            `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}`,
+            options.baseUrl ??
+              globalThis.location?.origin ??
+              "http://localhost",
+          );
+          const headers = new Headers(options.headers);
+          headers.set("content-type", "application/json");
+          const response = await client.request(url.toString(), {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify(body),
+          });
+          if (!response.ok) {
+            let errorBody: unknown;
+            try {
+              errorBody = await response.json();
+            } catch {
+              errorBody = undefined;
+            }
+            throw new ApiError(response.status, errorBody);
+          }
+          return (await response.json()) as ProjectResponse;
+        },
+        archive: async (input: ProjectPathRequest): Promise<void> => {
+          const requestInput: Record<string, unknown> = {};
+          if (
+            Object.hasOwn(input, "workspaceId") &&
+            input["workspaceId"] !== undefined
+          )
+            requestInput["workspaceId"] = input["workspaceId"];
+          if (
+            Object.hasOwn(input, "projectId") &&
+            input["projectId"] !== undefined
+          )
+            requestInput["projectId"] = input["projectId"];
+          const request = validateModel(requestInput, ProjectPathRequest);
+          const url = new URL(
+            `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}`,
+            options.baseUrl ??
+              globalThis.location?.origin ??
+              "http://localhost",
+          );
+          const headers = new Headers(options.headers);
+          const response = await client.request(url.toString(), {
+            method: "DELETE",
+            headers,
+          });
+          if (!response.ok) {
+            let errorBody: unknown;
+            try {
+              errorBody = await response.json();
+            } catch {
+              errorBody = undefined;
+            }
+            throw new ApiError(response.status, errorBody);
+          }
+          return undefined;
+        },
+        tasks: {
+          list: async (input: ListTasksRequest): Promise<TaskResponse[]> => {
+            const requestInput: Record<string, unknown> = {};
+            if (
+              Object.hasOwn(input, "workspaceId") &&
+              input["workspaceId"] !== undefined
+            )
+              requestInput["workspaceId"] = input["workspaceId"];
+            if (
+              Object.hasOwn(input, "projectId") &&
+              input["projectId"] !== undefined
+            )
+              requestInput["projectId"] = input["projectId"];
+            if (Object.hasOwn(input, "status") && input["status"] !== undefined)
+              requestInput["status"] = input["status"];
+            if (Object.hasOwn(input, "limit") && input["limit"] !== undefined)
+              requestInput["limit"] = input["limit"];
+            const request = validateModel(requestInput, ListTasksRequest);
+            const url = new URL(
+              `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}/tasks`,
+              options.baseUrl ??
+                globalThis.location?.origin ??
+                "http://localhost",
+            );
+            appendQuery(url.searchParams, "status", request["status"]);
+            appendQuery(url.searchParams, "limit", request["limit"]);
+            const headers = new Headers(options.headers);
+            const response = await client.request(url.toString(), {
+              method: "GET",
+              headers,
+            });
+            if (!response.ok) {
+              let errorBody: unknown;
+              try {
+                errorBody = await response.json();
+              } catch {
+                errorBody = undefined;
+              }
+              throw new ApiError(response.status, errorBody);
+            }
+            return (await response.json()) as TaskResponse[];
+          },
+          create: async (input: CreateTaskRequest): Promise<TaskResponse> => {
+            const requestInput: Record<string, unknown> = {};
+            if (
+              Object.hasOwn(input, "workspaceId") &&
+              input["workspaceId"] !== undefined
+            )
+              requestInput["workspaceId"] = input["workspaceId"];
+            if (
+              Object.hasOwn(input, "projectId") &&
+              input["projectId"] !== undefined
+            )
+              requestInput["projectId"] = input["projectId"];
+            if (
+              Object.hasOwn(input, "clientVersion") &&
+              input["clientVersion"] !== undefined
+            )
+              requestInput["clientVersion"] = input["clientVersion"];
+            const serializedBodyInput = JSON.stringify(
+              Reflect.get(input, "body"),
+            );
+            const bodyInput =
+              serializedBodyInput === undefined
+                ? undefined
+                : JSON.parse(serializedBodyInput);
+            if (Object.hasOwn(input, "body")) requestInput["body"] = bodyInput;
+            const request = validateModel(requestInput, CreateTaskRequest);
+            const body = request["body"];
+            const url = new URL(
+              `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}/tasks`,
+              options.baseUrl ??
+                globalThis.location?.origin ??
+                "http://localhost",
+            );
+            const header_2 = request["clientVersion"];
+            const headers = new Headers(options.headers);
+            if (header_2 !== undefined)
+              headers.set(
+                "x-client-version",
+                Array.isArray(header_2) ? header_2.join(",") : String(header_2),
+              );
+            headers.set("content-type", "application/json");
+            const response = await client.request(url.toString(), {
+              method: "POST",
+              headers,
+              body: JSON.stringify(body),
+            });
+            if (!response.ok) {
+              let errorBody: unknown;
+              try {
+                errorBody = await response.json();
+              } catch {
+                errorBody = undefined;
+              }
+              throw new ApiError(response.status, errorBody);
+            }
+            return (await response.json()) as TaskResponse;
+          },
+          get: async (input: TaskPathRequest): Promise<TaskResponse> => {
+            const requestInput: Record<string, unknown> = {};
+            if (
+              Object.hasOwn(input, "workspaceId") &&
+              input["workspaceId"] !== undefined
+            )
+              requestInput["workspaceId"] = input["workspaceId"];
+            if (
+              Object.hasOwn(input, "projectId") &&
+              input["projectId"] !== undefined
+            )
+              requestInput["projectId"] = input["projectId"];
+            if (Object.hasOwn(input, "taskId") && input["taskId"] !== undefined)
+              requestInput["taskId"] = input["taskId"];
+            const request = validateModel(requestInput, TaskPathRequest);
+            const url = new URL(
+              `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}/tasks/${encodeURIComponent(String(request["taskId"]))}`,
+              options.baseUrl ??
+                globalThis.location?.origin ??
+                "http://localhost",
+            );
+            const headers = new Headers(options.headers);
+            const response = await client.request(url.toString(), {
+              method: "GET",
+              headers,
+            });
+            if (!response.ok) {
+              let errorBody: unknown;
+              try {
+                errorBody = await response.json();
+              } catch {
+                errorBody = undefined;
+              }
+              throw new ApiError(response.status, errorBody);
+            }
+            return (await response.json()) as TaskResponse;
+          },
+          update: async (input: UpdateTaskRequest): Promise<TaskResponse> => {
+            const requestInput: Record<string, unknown> = {};
+            if (
+              Object.hasOwn(input, "workspaceId") &&
+              input["workspaceId"] !== undefined
+            )
+              requestInput["workspaceId"] = input["workspaceId"];
+            if (
+              Object.hasOwn(input, "projectId") &&
+              input["projectId"] !== undefined
+            )
+              requestInput["projectId"] = input["projectId"];
+            if (Object.hasOwn(input, "taskId") && input["taskId"] !== undefined)
+              requestInput["taskId"] = input["taskId"];
+            const serializedBodyInput = JSON.stringify(
+              Reflect.get(input, "body"),
+            );
+            const bodyInput =
+              serializedBodyInput === undefined
+                ? undefined
+                : JSON.parse(serializedBodyInput);
+            if (Object.hasOwn(input, "body")) requestInput["body"] = bodyInput;
+            const request = validateModel(requestInput, UpdateTaskRequest);
+            const body = request["body"];
+            const url = new URL(
+              `/workspaces/${encodeURIComponent(String(request["workspaceId"]))}/projects/${encodeURIComponent(String(request["projectId"]))}/tasks/${encodeURIComponent(String(request["taskId"]))}`,
+              options.baseUrl ??
+                globalThis.location?.origin ??
+                "http://localhost",
+            );
+            const headers = new Headers(options.headers);
+            headers.set("content-type", "application/json");
+            const response = await client.request(url.toString(), {
+              method: "PATCH",
+              headers,
+              body: JSON.stringify(body),
+            });
+            if (!response.ok) {
+              let errorBody: unknown;
+              try {
+                errorBody = await response.json();
+              } catch {
+                errorBody = undefined;
+              }
+              throw new ApiError(response.status, errorBody);
+            }
+            return (await response.json()) as TaskResponse;
+          },
+        },
+      },
     },
   };
 }

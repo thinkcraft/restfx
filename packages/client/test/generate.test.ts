@@ -83,6 +83,8 @@ describe("API client generator", () => {
       models: "./models.js",
     });
     assert.match(generated, /import \{[^}]*CreateRecordRequest/s);
+    assert.match(generated, /records:\s*\{/);
+    assert.match(generated, /create:\s*async/);
     assert.match(
       generated,
       /validateModel\(requestInput, CreateRecordRequest\)/,
@@ -112,11 +114,11 @@ describe("API client generator", () => {
       });
 
       await assert.rejects(
-        api.createRecord({ id: "not-a-uuid", payload: { name: "valid" } }),
+        api.records.create({ id: "not-a-uuid", payload: { name: "valid" } }),
         /validation failed/i,
       );
       await assert.rejects(
-        api.createRecord({
+        api.records.create({
           id: "550e8400-e29b-41d4-a716-446655440000",
           payload: { name: "x" },
         }),
@@ -124,7 +126,7 @@ describe("API client generator", () => {
       );
       assert.equal(fetchCalls, 0);
 
-      const response = await api.createRecord({
+      const response = await api.records.create({
         id: "550e8400-e29b-41d4-a716-446655440000",
         payload: { name: "valid", note: undefined },
       });

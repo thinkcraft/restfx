@@ -20,20 +20,22 @@ export function generateClient(
   const schemas: Record<string, JsonObject> =
     document.components?.schemas ?? {};
   const modelAliases = createModelAliases(schemas);
-  const usedNames = new Set<string>();
-  const methods: string[] = [];
+  const root: ClientNode = { methods: [], children: new Map() };
   const imports = new Set<string>();
 
   for (const [path, pathItem] of Object.entries<JsonObject>(document.paths)) {
     for (const [method, operation] of Object.entries<JsonObject>(pathItem)) {
       if (!httpMethods.has(method.toLowerCase()) || !operation) continue;
-      const name = createMethodName(operation.operationId, method, path);
-      if (usedNames.has(name)) {
-        throw new TypeError(`Duplicate generated client method name: ${name}`);
+      const node = getClientNode(root, getResourcePath(path));
+      const name = createResourceMethodName(operation, method, path);
+      if (node.methods.some((entry) => entry.name === name)) {
+        throw new TypeError(
+          `Duplicate generated client method name for ${path}: ${name}`,
+        );
       }
-      usedNames.add(name);
-      methods.push(
-        generateOperation(
+      node.methods.push({
+        name,
+        source: generateOperation(
           path,
           method.toUpperCase(),
           operation,
@@ -42,7 +44,7 @@ export function generateClient(
           imports,
           name,
         ),
-      );
+      });
     }
   }
 
@@ -61,9 +63,7 @@ export class ApiError extends Error {
 
 export function createApiClient(options: ClientOptions = {}) {
   const client = createClient(options);
-  return {
-${methods.map((methodSource) => indent(methodSource, 4)).join(",\n")}
-  };
+  return ${renderClientNode(root, 2)};
 }
 
 function appendQuery(searchParams: URLSearchParams, name: string, value: unknown) {
@@ -87,6 +87,95 @@ const httpMethods = new Set([
   "patch",
   "trace",
 ]);
+
+interface ClientNode {
+  readonly methods: Array<{ readonly name: string; readonly source: string }>;
+  readonly children: Map<string, ClientNode>;
+}
+
+function getResourcePath(path: string) {
+  return path
+    .split("/")
+    .filter((segment) => segment && !/^\{[^{}]+\}$/.test(segment))
+    .map((segment) => safeIdentifier(segment));
+}
+
+function getClientNode(root: ClientNode, resourcePath: string[]) {
+  let node = root;
+  for (const segment of resourcePath) {
+    let child = node.children.get(segment);
+    if (!child) {
+      child = { methods: [], children: new Map() };
+      node.children.set(segment, child);
+    }
+    node = child;
+  }
+  return node;
+}
+
+function createResourceMethodName(
+  operation: JsonObject,
+  method: string,
+  path: string,
+) {
+  const resourcePath = getResourcePath(path);
+  if (resourcePath.length === 0) {
+    return createMethodName(operation.operationId, method, path);
+  }
+
+  const operationId = operation.operationId;
+  const operationAction =
+    typeof operationId === "string"
+      ? /^(list|create|add|post|read|get|fetch|update|patch|replace|put|delete|remove|archive|restore|head|options|trace)(?=[A-Z]|$)/i
+          .exec(operationId)?.[1]
+          ?.toLowerCase()
+      : undefined;
+  if (operationAction) {
+    switch (operationAction) {
+      case "add":
+      case "post":
+        return "create";
+      case "read":
+      case "fetch":
+        return "get";
+      case "patch":
+      case "replace":
+      case "put":
+        return "update";
+      case "remove":
+        return "delete";
+      default:
+        return operationAction;
+    }
+  }
+
+  const isItemPath = /\{[^{}]+\}\/?$/.test(path);
+  switch (method.toUpperCase()) {
+    case "GET":
+    case "HEAD":
+      return isItemPath ? "get" : "list";
+    case "POST":
+      return "create";
+    case "PUT":
+    case "PATCH":
+      return "update";
+    case "DELETE":
+      return "delete";
+    default:
+      return method.toLowerCase();
+  }
+}
+
+function renderClientNode(node: ClientNode, indentLevel: number): string {
+  const entries = node.methods.map(({ source }) => source);
+  for (const [name, child] of node.children) {
+    entries.push(`${name}: ${renderClientNode(child, indentLevel + 2)}`);
+  }
+  const closingIndent = " ".repeat(indentLevel);
+  return `{
+${entries.map((entry) => indent(entry, indentLevel + 2)).join(",\n")}
+${closingIndent}}`;
+}
 
 function generateOperation(
   path: string,
