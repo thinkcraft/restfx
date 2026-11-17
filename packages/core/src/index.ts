@@ -28,9 +28,14 @@ export {
   ArrayOf,
   BooleanField,
   Email,
+  Enum,
   IntegerField,
   NumberField,
   StringField,
   UUID,
 } from "./fields/index.js";
-export type { FieldType, FieldTypeConstructor } from "./fields/index.js";
+export type {
+  EnumValue,
+  FieldType,
+  FieldTypeConstructor,
+} from "./fields/index.js";

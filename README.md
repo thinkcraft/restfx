@@ -11,8 +11,8 @@ client, and a Node.js HTTP server with decorator-based resources and routing.
 
 ## Workspace packages
 
-- `packages/core` (`@framework/core`) — typed framework configuration via
-  `defineConfig`.
+- `packages/core` (`@framework/core`) — shared models, field validation,
+  enum field types, and typed framework configuration via `defineConfig`.
 - `packages/client` (`@framework/client`) — a small configurable fetch client.
 - `packages/server` (`@framework/server`) — Node.js HTTP server, decorated
   resources, middleware, routing, and request-body parsing. See the
@@ -37,6 +37,20 @@ bodies, query filters, and CRUD-style operations. Its seeded workspace ID is
 
 ```sh
 curl "http://localhost:3000/workspaces/550e8400-e29b-41d4-a716-446655440000/projects?status=active&limit=10"
+```
+
+Use `Enum` for fields whose values are restricted to a fixed set. It infers the
+literal union, validates values at runtime, and generates the corresponding
+OpenAPI enum schema:
+
+```ts
+import { Enum, Field, Model } from "@framework/core";
+
+@Model()
+class Project {
+  @Field({ type: Enum(["active", "archived"]) })
+  status!: "active" | "archived";
+}
 ```
 
 ## Common commands

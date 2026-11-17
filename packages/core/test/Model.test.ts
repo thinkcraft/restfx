@@ -4,6 +4,7 @@ import {
   ArrayOf,
   BooleanField,
   Email,
+  Enum,
   Field,
   getModelMetadata,
   IntegerField,
@@ -120,6 +121,12 @@ class RequestBodyModel {
 }
 
 @Model()
+class EnumModel {
+  @Field({ type: Enum(["active", "archived"]) })
+  status!: "active" | "archived";
+}
+
+@Model()
 class SourcedRequestModel {
   @Field({ type: UUID, source: "path" })
   id!: string;
@@ -213,6 +220,18 @@ describe("shared model decorators", () => {
     );
     assert.deepEqual(error.issues, [
       { path: "body.label", message: "Must contain at least 2 characters" },
+    ]);
+  });
+
+  it("validates enum fields against their literal options", () => {
+    assertModelData(validateModel({ status: "active" }, EnumModel), {
+      status: "active",
+    });
+    const error = captureModelError(() =>
+      validateModel({ status: "pending" }, EnumModel),
+    );
+    assert.deepEqual(error.issues, [
+      { path: "status", message: "Expected one of: active, archived" },
     ]);
   });
 

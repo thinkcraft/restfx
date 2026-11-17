@@ -1,5 +1,6 @@
 import {
   ArrayOf,
+  Enum,
   Field,
   IntegerField,
   Model,
@@ -32,7 +33,7 @@ export class UpdateProjectBody {
   @Field({ type: StringField, optional: true, maxLength: 500 })
   description?: string;
 
-  @Field({ type: StringField, optional: true })
+  @Field({ type: Enum(["active", "archived"]), optional: true })
   status?: "active" | "archived";
 
   @Field({
@@ -67,7 +68,7 @@ export class UpdateTaskBody {
   @Field({ type: IntegerField, optional: true, minimum: 1, maximum: 5 })
   priority?: number;
 
-  @Field({ type: StringField, optional: true })
+  @Field({ type: Enum(["todo", "in-progress", "done"]), optional: true })
   status?: "todo" | "in-progress" | "done";
 }
 
@@ -80,12 +81,12 @@ export class ListProjectsRequest {
   search?: string;
 
   @Field({
-    type: ArrayOf(StringField),
+    type: ArrayOf(Enum(["active", "archived"])),
     optional: true,
     source: "query",
     sourceName: "status",
   })
-  statuses?: string[];
+  statuses?: ("active" | "archived")[];
 
   @Field({
     type: IntegerField,
@@ -135,8 +136,12 @@ export class UpdateProjectRequest extends ProjectPathRequest {
 
 @Model()
 export class ListTasksRequest extends ProjectPathRequest {
-  @Field({ type: StringField, optional: true, source: "query" })
-  status?: string;
+  @Field({
+    type: Enum(["todo", "in-progress", "done"]),
+    optional: true,
+    source: "query",
+  })
+  status?: "todo" | "in-progress" | "done";
 
   @Field({
     type: IntegerField,
@@ -188,10 +193,7 @@ export class ProjectResponse {
   @Field({ type: StringField, optional: true })
   description?: string;
 
-  @Field({
-    type: StringField,
-    schema: { type: "string", enum: ["active", "archived"] },
-  })
+  @Field({ type: Enum(["active", "archived"]) })
   status!: "active" | "archived";
 
   @Field({ type: ArrayOf(StringField), maxItems: 10, uniqueItems: true })
@@ -215,9 +217,6 @@ export class TaskResponse {
   @Field({ type: IntegerField, minimum: 1, maximum: 5 })
   priority!: number;
 
-  @Field({
-    type: StringField,
-    schema: { type: "string", enum: ["todo", "in-progress", "done"] },
-  })
+  @Field({ type: Enum(["todo", "in-progress", "done"]) })
   status!: "todo" | "in-progress" | "done";
 }

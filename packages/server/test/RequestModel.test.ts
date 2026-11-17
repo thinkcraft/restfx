@@ -9,10 +9,11 @@ import {
   HttpResource,
   HttpServer,
   OpenApiMiddleware,
-} from "../src/index.js";
+} from "../src";
 import {
   ArrayOf,
   BooleanField,
+  Enum,
   Field,
   Model,
   StringField,
@@ -23,6 +24,9 @@ import {
 class CreateRequestBody {
   @Field({ type: StringField, minLength: 2 })
   name!: string;
+
+  @Field({ type: Enum(["active", "archived"]), optional: true })
+  status?: "active" | "archived";
 }
 
 @Model()
@@ -162,6 +166,9 @@ describe("HTTP request models", () => {
       const response = await fetch(`${baseUrl}/openapi.json`);
       assert.equal(response.status, 200);
       const document = (await response.json()) as {
+        components: {
+          schemas: Record<string, { properties: Record<string, unknown> }>;
+        };
         paths: Record<
           string,
           {
@@ -204,6 +211,10 @@ describe("HTTP request models", () => {
       assert.deepEqual(
         operation.requestBody.content["application/json"]!.schema,
         { $ref: "#/components/schemas/CreateRequestBody" },
+      );
+      assert.deepEqual(
+        document.components.schemas.CreateRequestBody!.properties.status,
+        { type: "string", enum: ["active", "archived"] },
       );
       assert.deepEqual(operation["x-framework-client"], {
         requestModel: { $ref: "#/components/schemas/CreateRequest" },

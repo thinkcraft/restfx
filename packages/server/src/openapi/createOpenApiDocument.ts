@@ -530,6 +530,19 @@ function createFieldSchema(
 function getFieldTypeSchema(
   type: NonNullable<ModelFieldMetadata["type"]>,
 ): Record<string, unknown> {
+  const enumValues = (
+    type as typeof type & { readonly enumValues?: readonly unknown[] }
+  ).enumValues;
+  if (enumValues) {
+    const valueTypes = new Set(enumValues.map((value) => typeof value));
+    const schemaType =
+      valueTypes.size === 1 ? primitiveEnumType(enumValues[0]) : undefined;
+    return {
+      ...(schemaType ? { type: schemaType } : {}),
+      enum: [...enumValues],
+    };
+  }
+
   if (
     type === StringField ||
     type === Email ||
@@ -551,6 +564,18 @@ function getFieldTypeSchema(
     }
   ).itemType;
   return itemType ? { type: "array", items: getFieldTypeSchema(itemType) } : {};
+}
+
+function primitiveEnumType(value: unknown) {
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return typeof value;
+    case "number":
+      return "number";
+    default:
+      return undefined;
+  }
 }
 
 function expandOptionalPath(path: string) {

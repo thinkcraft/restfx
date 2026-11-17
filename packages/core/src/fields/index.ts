@@ -1,6 +1,8 @@
 export { ArrayOf } from "./ArrayOf.js";
 export { BooleanField } from "./BooleanField.js";
 export { Email } from "./Email.js";
+export { Enum } from "./Enum.js";
+export type { EnumValue } from "./Enum.js";
 export { IntegerField } from "./IntegerField.js";
 export { NumberField } from "./NumberField.js";
 export { StringField } from "./StringField.js";
