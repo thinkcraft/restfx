@@ -34,6 +34,29 @@ const user = validateModel(
 // `user` is a CreateUser instance; unknown fields are stripped by default.
 ```
 
+Use the validated result, rather than the original input, in application code.
+For example, `validateModel` is useful when validating data outside an HTTP
+route, such as a message from a queue or data read from an untyped source:
+
+```ts
+import { ModelValidationError, validateModel } from "@restfx/core";
+
+function readUser(input: unknown) {
+  try {
+    const user = validateModel(input, CreateUser);
+    return `${user.name} <${user.email}>`;
+  } catch (error) {
+    if (error instanceof ModelValidationError) {
+      return error.issues; // Each issue has a `path` and a `message`.
+    }
+    throw error;
+  }
+}
+```
+
+The server validates route request bodies automatically when a model is
+declared in the route options; see [request validation](../server/#request-validation).
+
 Validation does not invoke the model constructor. It returns an instance
 containing declared fields, with nested models validated recursively. Invalid
 input throws `ModelValidationError`; its `issues` array contains `{ path,
@@ -71,6 +94,35 @@ Built-in field types exported by core are:
 Constraints are checked at runtime and represented in generated JSON Schema and
 OpenAPI where supported. Schema metadata does not perform runtime validation;
 enforce application rules with a field type or model validator too.
+
+For example, use `Enum` for a fixed set of values and `ArrayOf` for repeated
+values. Optional and nullable are independent: this `description` can be
+omitted, set to `null`, or contain a string. The default is applied only when
+`visibility` is omitted:
+
+```ts
+import { ArrayOf, Enum, Field, Model, StringField } from "@restfx/core";
+
+@Model()
+class CreateProject {
+  @Field({ type: StringField, minLength: 1, maxLength: 100 })
+  name!: string;
+
+  @Field({ type: Enum(["private", "public"]), default: "private" })
+  visibility!: "private" | "public";
+
+  @Field({ type: ArrayOf(StringField), optional: true, uniqueItems: true })
+  tags?: string[];
+
+  @Field({ type: StringField, optional: true, nullable: true })
+  description?: string | null;
+}
+```
+
+The TypeScript property type should reflect the field's runtime behavior. In
+particular, mark nullable fields with `| null`; `optional` controls whether a
+property may be absent, while `nullable` controls whether its value may be
+`null`.
 
 ## Nested models and inheritance
 
@@ -134,8 +186,43 @@ class DateRangeModel {
 Core fields can declare `source: "path" | "query" | "header"` and an optional
 `sourceName` for the external parameter name. A nested model can use
 `source: "body"`. This metadata lets one model describe both the shape and
-validation rules and where the server reads each value. Core itself does not
-parse HTTP input; see [combined request models](../request-handling/).
+validation rules and where the server reads each value. Pass that model to a
+route decorator with its `request` option, then read the validated instance
+with `context.req.model()`:
+
+```ts
+import { BooleanField, Field, Model, UUID } from "@restfx/core";
+import { HttpContext, HttpGet, HttpResource } from "@restfx/server";
+
+@Model()
+class GetProjectRequest {
+  @Field({ type: UUID, source: "path" })
+  projectId!: string;
+
+  @Field({ type: BooleanField, optional: true, source: "query" })
+  includeTasks?: boolean;
+}
+
+@HttpResource("projects")
+class ProjectsResource {
+  @HttpGet({ path: ":projectId", request: GetProjectRequest })
+  async get(context: HttpContext) {
+    const request = await context.req.model(GetProjectRequest);
+    return {
+      id: request.projectId,
+      includeTasks: request.includeTasks ?? false,
+    };
+  }
+}
+```
+
+`request` is for models assembled from path, query, header, and/or body fields.
+For a body-only model, use the decorator's `body` option and
+`context.req.parseBody()`. A route can use either `request` or `body`, not both.
+The server validates request models before calling the handler and generates
+OpenAPI parameters and body schemas from their metadata. Core itself does not
+parse HTTP input; see [combined request models](../request-handling/) for body
+fields, source-name overrides, and more examples.
 
 ## Typed configuration
 
