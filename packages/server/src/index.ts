@@ -67,6 +67,7 @@ export type {
   HttpParameterOptions,
   HttpRequestBodyOptions,
   HttpResponseOptions,
+  HttpResponseModel,
   OpenApiDocument,
   OpenApiInfo,
   OpenApiOptions,

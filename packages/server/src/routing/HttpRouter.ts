@@ -19,8 +19,10 @@ import { HttpResult } from "../HttpResult.js";
 import { HttpHeaderName } from "../HttpHeaderName.js";
 import {
   getModelMetadata,
+  ModelValidationError,
   validateModel,
   type ModelConstructor,
+  type ValidationIssue,
 } from "@framework/core";
 import { getRequestModelMetadata } from "../request/RequestModelMetadata.js";
 import { getInjectedProperties } from "../metadata/InjectionMetadata.js";
@@ -201,16 +203,12 @@ export class HttpRouter {
         if (value.body !== undefined) {
           value = new HttpResult(
             value.status,
-            validateModel(value.body, match.route.responseModel, {
-              unknownFields: "strip",
-            }),
+            validateResponseModel(value.body, match.route.responseModel),
             value.headers,
           );
         }
       } else {
-        value = validateModel(value, match.route.responseModel, {
-          unknownFields: "strip",
-        });
+        value = validateResponseModel(value, match.route.responseModel);
       }
     }
     return { matched: true, value };
@@ -409,4 +407,40 @@ function validateRequestModelRoute(model: ModelConstructor, path: string) {
       );
     }
   }
+}
+
+function validateResponseModel(
+  value: unknown,
+  responseModel: NonNullable<Route["responseModel"]>,
+) {
+  if (typeof responseModel === "function") {
+    return validateModel(value, responseModel, { unknownFields: "strip" });
+  }
+
+  if (!Array.isArray(value)) {
+    throw new ModelValidationError([
+      { path: "", message: "Expected an array" },
+    ]);
+  }
+
+  const issues: ValidationIssue[] = [];
+  const validated = value.map((item, index) => {
+    try {
+      return validateModel(item, responseModel.arrayOf, {
+        unknownFields: "strip",
+      });
+    } catch (error) {
+      if (!(error instanceof ModelValidationError)) throw error;
+      issues.push(
+        ...error.issues.map((issue) => ({
+          path: issue.path ? `[${index}].${issue.path}` : `[${index}]`,
+          message: issue.message,
+        })),
+      );
+      return item;
+    }
+  });
+
+  if (issues.length > 0) throw new ModelValidationError(issues);
+  return validated;
 }

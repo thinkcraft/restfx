@@ -138,6 +138,12 @@ class ConstructorGuardModel {
   }
 }
 
+@Model()
+class ModelArrayContainer {
+  @Field({ type: ArrayOf(ConstructorGuardModel) })
+  children!: ConstructorGuardModel[];
+}
+
 @Model({
   unknownFields: "reject",
   schema: { title: "Base", minProperties: 1 },
@@ -760,6 +766,25 @@ describe("shared model decorators", () => {
 
     assert.ok(value.child instanceof ConstructorGuardModel);
     assertModelData(value.child, { name: "Ada" });
+  });
+
+  it("validates, shapes, and types arrays of decorated models", () => {
+    const value = validateModel(
+      { children: [{ name: "Ada", extra: true }] },
+      ModelArrayContainer,
+    );
+
+    assert.ok(value.children[0] instanceof ConstructorGuardModel);
+    assertModelData(value.children[0], { name: "Ada" });
+
+    const error = captureModelError(() =>
+      validateModel({ children: [{ name: 42 }] }, ModelArrayContainer),
+    );
+    assert.equal(error.issues[0]?.path, "children");
+    assert.match(
+      error.issues[0]?.message ?? "",
+      /Item 0: name: Expected a string/,
+    );
   });
 
   it("merges inherited schemas and runs base and derived validators", () => {

@@ -22,13 +22,10 @@ export class TasksResource {
     operationId: "listTasks",
     tags: ["Tasks"],
     request: ListTasksRequest,
+    response: { arrayOf: TaskResponse },
     responses: {
       "200": {
         description: "Tasks for the project",
-        schema: {
-          type: "array",
-          items: { $ref: "#/components/schemas/TaskResponse" },
-        },
       },
       "404": { description: "Project not found" },
     },

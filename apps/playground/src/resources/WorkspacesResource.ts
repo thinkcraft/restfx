@@ -5,6 +5,7 @@ import {
   HttpResult,
   Inject,
 } from "@framework/server";
+import { WorkspaceResponse } from "../models/WorkspaceResponse.js";
 import { WorkspaceService } from "../services/WorkspaceService.js";
 import { ProjectsResource } from "./ProjectsResource.js";
 
@@ -17,22 +18,10 @@ export class WorkspacesResource {
     summary: "List workspaces",
     operationId: "listWorkspaces",
     tags: ["Workspaces"],
+    response: { arrayOf: WorkspaceResponse },
     responses: {
       "200": {
         description: "Available workspaces",
-        schema: {
-          type: "array",
-          items: {
-            type: "object",
-            required: ["id", "name", "plan", "region"],
-            properties: {
-              id: { type: "string", format: "uuid" },
-              name: { type: "string" },
-              plan: { type: "string", enum: ["free", "team", "enterprise"] },
-              region: { type: "string" },
-            },
-          },
-        },
       },
     },
   })

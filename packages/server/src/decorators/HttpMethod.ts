@@ -2,6 +2,7 @@ import { registerHandler } from "../metadata/ResourceMetadata.js";
 import type { ModelConstructor } from "@framework/core";
 import type {
   HttpOperationOptions,
+  HttpResponseModel,
   HttpRequestBodyOptions,
   HttpResponseOptions,
 } from "../openapi/types.js";
@@ -10,7 +11,7 @@ export interface HttpRouteOptions extends HttpOperationOptions {
   readonly path?: string;
   readonly body?: ModelConstructor;
   readonly request?: ModelConstructor;
-  readonly response?: ModelConstructor;
+  readonly response?: HttpResponseModel;
   readonly requestBody?: HttpRequestBodyOptions;
   readonly responses?: Readonly<Record<string, HttpResponseOptions>>;
   readonly operation?: HttpOperationOptions;

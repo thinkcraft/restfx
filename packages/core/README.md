@@ -64,7 +64,7 @@ Built-in field types are exported from `@framework/core`:
 - `DateField`, `TimeField`, and `DateTimeField` for validated ISO/RFC 3339
   strings (the values remain strings)
 - `Enum([...])` for a literal set of allowed values
-- `ArrayOf(FieldType)` for arrays of a field type
+- `ArrayOf(FieldType | Model)` for arrays of a field type or decorated model
 - `UnionOf(...FieldTypes)` and `DiscriminatedUnion(key, variants)` for union
   values and decorated model variants
 

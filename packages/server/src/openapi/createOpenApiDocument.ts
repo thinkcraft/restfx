@@ -15,6 +15,7 @@ import type { Route } from "../routing/Route.js";
 import { getRequestModelMetadata } from "../request/RequestModelMetadata.js";
 import type {
   HttpResponseOptions,
+  HttpResponseModel,
   OpenApiDocument,
   OpenApiOptions,
   OpenApiSchema,
@@ -222,7 +223,7 @@ function createOperation(
         response.content = {
           "application/json": {
             schema: {
-              $ref: `#/components/schemas/${modelNames.get(route.responseModel)!}`,
+              ...getResponseModelSchema(route.responseModel, modelNames),
             },
           },
         };
@@ -403,15 +404,31 @@ function getRequestModelParameters(
 }
 
 function modelResponse(
-  model: ModelConstructor,
+  model: HttpResponseModel,
   modelNames: Map<ModelConstructor, string>,
 ): Record<string, unknown> {
   return {
     description: "Successful response",
     content: {
       "application/json": {
-        schema: { $ref: `#/components/schemas/${modelNames.get(model)!}` },
+        schema: getResponseModelSchema(model, modelNames),
       },
+    },
+  };
+}
+
+function getResponseModelSchema(
+  model: HttpResponseModel,
+  modelNames: Map<ModelConstructor, string>,
+): Record<string, unknown> {
+  if (typeof model === "function") {
+    return { $ref: `#/components/schemas/${modelNames.get(model)!}` };
+  }
+
+  return {
+    type: "array",
+    items: {
+      $ref: `#/components/schemas/${modelNames.get(model.arrayOf)!}`,
     },
   };
 }
@@ -451,7 +468,13 @@ function createModelNames(routes: readonly Route[]) {
       const body = getRequestModelMetadata(route.requestModel).body;
       if (body?.model) addModel(body.model);
     }
-    if (route.responseModel) addModel(route.responseModel);
+    if (route.responseModel) {
+      addModel(
+        typeof route.responseModel === "function"
+          ? route.responseModel
+          : route.responseModel.arrayOf,
+      );
+    }
     for (const response of Object.values(route.responses ?? {})) {
       if (response.model) addModel(response.model);
     }
@@ -496,9 +519,11 @@ function getModelsFromFieldType(type: Function | undefined) {
     visited.add(fieldType);
     const metadata = fieldType as Function & {
       readonly itemType?: Function;
+      readonly itemModel?: ModelConstructor;
       readonly unionTypes?: readonly Function[];
       readonly modelMapping?: Readonly<Record<string, ModelConstructor>>;
     };
+    if (metadata.itemModel) models.add(metadata.itemModel);
     for (const model of Object.values(metadata.modelMapping ?? {})) {
       models.add(model);
     }
@@ -643,8 +668,18 @@ function getFieldTypeSchema(
   const itemType = (
     type as typeof type & {
       readonly itemType?: typeof type;
+      readonly itemModel?: ModelConstructor;
     }
   ).itemType;
+  const itemModel = (
+    type as typeof type & { readonly itemModel?: ModelConstructor }
+  ).itemModel;
+  if (itemModel) {
+    return {
+      type: "array",
+      items: { $ref: `#/components/schemas/${modelNames.get(itemModel)!}` },
+    };
+  }
   return itemType
     ? { type: "array", items: getFieldTypeSchema(itemType, modelNames) }
     : {};

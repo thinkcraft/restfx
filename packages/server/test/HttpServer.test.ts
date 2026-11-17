@@ -186,9 +186,16 @@ class PostsResource {
 }
 
 class UsersResource {
-  @HttpGet()
+  @HttpGet({ response: { arrayOf: UserResponseModel } })
   list() {
-    return [{ id: "u1" }];
+    return [
+      {
+        id: "u1",
+        email: "user@example.test",
+        name: "User",
+        internalRole: "admin",
+      },
+    ];
   }
 
   @HttpPost({
@@ -217,6 +224,22 @@ class UsersResource {
   @HttpGet({ path: "invalid-response", response: UserResponseModel })
   invalidResponse() {
     return { id: 123, email: "not-an-email", name: "Invalid" };
+  }
+
+  @HttpGet({
+    path: "invalid-response-array",
+    response: { arrayOf: UserResponseModel },
+  })
+  invalidResponseArray() {
+    return [{ id: "u1", email: "invalid", name: "Invalid" }];
+  }
+
+  @HttpGet({
+    path: "non-array-response",
+    response: { arrayOf: UserResponseModel },
+  })
+  nonArrayResponse() {
+    return { id: "u1", email: "user@example.test", name: "User" };
   }
 }
 
@@ -683,6 +706,15 @@ describe("HttpServer resource decorators", () => {
         createUser.responses["200"].content["application/json"].schema.$ref,
         "#/components/schemas/UserResponseModel",
       );
+      assert.deepEqual(
+        document.paths["/api/users"].get.responses["200"].content[
+          "application/json"
+        ].schema,
+        {
+          type: "array",
+          items: { $ref: "#/components/schemas/UserResponseModel" },
+        },
+      );
 
       const userSchema = document.components.schemas.CreateUserModel;
       assert.deepEqual(userSchema.required, ["email", "name"]);
@@ -807,6 +839,24 @@ describe("HttpServer resource decorators", () => {
     });
   });
 
+  it("validates each item in array response models", async () => {
+    const response = await fetch(`${baseUrl}/api/users/invalid-response-array`);
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      message: "Internal Server Error",
+    });
+  });
+
+  it("rejects non-array values for array response models", async () => {
+    const response = await fetch(`${baseUrl}/api/users/non-array-response`);
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      message: "Internal Server Error",
+    });
+  });
+
   it("dispatches to handlers on nested route", async () => {
     const response = await fetch(`${baseUrl}/api/posts/1/comments`);
 
@@ -821,7 +871,9 @@ describe("HttpServer resource decorators", () => {
     const response = await fetch(`${baseUrl}/api/users`);
 
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), [{ id: "u1" }]);
+    assert.deepEqual(await response.json(), [
+      { id: "u1", email: "user@example.test", name: "User" },
+    ]);
   });
 
   it("supports handler paths and HttpResult status codes", async () => {

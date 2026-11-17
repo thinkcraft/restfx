@@ -31,6 +31,71 @@ describe("playground end-to-end API", () => {
       assert.ok(openApi.paths["/workspaces/{workspaceId}/projects"]?.get);
       assert.ok(openApi.paths["/workspaces/{workspaceId}/projects"]?.post);
       assert.ok(openApi.components?.schemas?.CreateProjectRequest);
+      assert.ok(openApi.components?.schemas?.WorkspaceResponse);
+      assert.ok(openApi.components?.schemas?.TaskResponse);
+      assert.ok(openApi.components?.schemas?.ListProjectsResponse);
+      assert.deepEqual(
+        (
+          openApi.paths["/workspaces"]?.get as {
+            responses: Record<
+              string,
+              { content: { "application/json": { schema: unknown } } }
+            >;
+          }
+        ).responses["200"]?.content["application/json"].schema,
+        {
+          type: "array",
+          items: { $ref: "#/components/schemas/WorkspaceResponse" },
+        },
+      );
+      assert.deepEqual(
+        (
+          openApi.paths["/workspaces/{workspaceId}/projects/{projectId}/tasks"]
+            ?.get as {
+            responses: Record<
+              string,
+              { content: { "application/json": { schema: unknown } } }
+            >;
+          }
+        ).responses["200"]?.content["application/json"].schema,
+        {
+          type: "array",
+          items: { $ref: "#/components/schemas/TaskResponse" },
+        },
+      );
+      assert.deepEqual(
+        (
+          openApi.paths["/workspaces/{workspaceId}/projects"]?.get as {
+            responses: Record<
+              string,
+              { content: { "application/json": { schema: unknown } } }
+            >;
+          }
+        ).responses["200"]?.content["application/json"].schema,
+        { $ref: "#/components/schemas/ListProjectsResponse" },
+      );
+      assert.deepEqual(
+        (
+          openApi.components?.schemas?.ListProjectsResponse as {
+            properties: Record<string, unknown>;
+          }
+        ).properties.items,
+        {
+          type: "array",
+          items: { $ref: "#/components/schemas/ProjectResponse" },
+        },
+      );
+
+      const workspacesResponse = await fetch(`${baseUrl}/workspaces`);
+      assert.equal(workspacesResponse.status, 200);
+      assert.deepEqual(await workspacesResponse.json(), [
+        {
+          id: exampleWorkspaceId,
+          name: "Northstar Studio",
+          plan: "enterprise",
+          region: "us-west-2",
+        },
+      ]);
 
       const projects = await api.workspaces.projects.list({
         workspaceId: exampleWorkspaceId,

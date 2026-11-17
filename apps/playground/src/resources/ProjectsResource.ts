@@ -8,6 +8,7 @@ import {
 } from "@framework/server";
 import { CreateProjectRequest } from "../models/CreateProjectRequest.js";
 import { ListProjectsRequest } from "../models/ListProjectsRequest.js";
+import { ListProjectsResponse } from "../models/ListProjectsResponse.js";
 import { ProjectResponse } from "../models/ProjectResponse.js";
 import { ProjectService } from "../services/ProjectService.js";
 import { ProjectResource } from "./ProjectResource.js";
@@ -24,21 +25,10 @@ export class ProjectsResource {
     operationId: "listProjects",
     tags: ["Projects"],
     request: ListProjectsRequest,
+    response: ListProjectsResponse,
     responses: {
       "200": {
         description: "A page of matching projects",
-        schema: {
-          type: "object",
-          required: ["items", "total", "limit"],
-          properties: {
-            items: {
-              type: "array",
-              items: { $ref: "#/components/schemas/ProjectResponse" },
-            },
-            total: { type: "integer", minimum: 0 },
-            limit: { type: "integer", minimum: 1, maximum: 50 },
-          },
-        },
       },
     },
   })

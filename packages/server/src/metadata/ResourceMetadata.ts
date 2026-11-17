@@ -2,6 +2,7 @@ import type { HttpContext } from "../HttpContext.js";
 import type { ModelConstructor } from "@framework/core";
 import type {
   HttpOperationOptions,
+  HttpResponseModel,
   HttpRequestBodyOptions,
   HttpResponseOptions,
 } from "../openapi/types.js";
@@ -19,7 +20,7 @@ export interface HttpHandlerMetadata {
   readonly name: string | symbol;
   readonly bodyModel?: ModelConstructor;
   readonly requestModel?: ModelConstructor;
-  readonly responseModel?: ModelConstructor;
+  readonly responseModel?: HttpResponseModel;
   readonly operation?: HttpOperationOptions;
   readonly requestBody?: HttpRequestBodyOptions;
   readonly responses?: Readonly<Record<string, HttpResponseOptions>>;

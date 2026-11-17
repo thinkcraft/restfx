@@ -1,5 +1,8 @@
 import type { ModelConstructor } from "@framework/core";
 
+export type HttpResponseModel =
+  ModelConstructor | { readonly arrayOf: ModelConstructor };
+
 export type OpenApiSchema = Readonly<Record<string, unknown>>;
 
 export interface HttpParameterOptions {

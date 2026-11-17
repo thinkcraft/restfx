@@ -436,6 +436,18 @@ data returns `422` with field-path issues. Response models validate JSON results
 and strip undeclared fields. They do not apply to raw streamed responses or
 streamed request bodies.
 
+For an endpoint that returns a list, declare the item model with `arrayOf`:
+
+```ts
+@HttpGet({ response: { arrayOf: UserResponse } })
+list() {
+  return listUsers();
+}
+```
+
+Each item is validated and shaped with the response model, and OpenAPI describes
+the response as an array whose items reference that model.
+
 ### Combined request models
 
 Declare request sources directly in core `@Field` metadata. This lets the same
