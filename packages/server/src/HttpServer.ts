@@ -11,6 +11,8 @@ import { HttpResponse } from "./HttpResponse.js";
 import { HttpError } from "./HttpError.js";
 import { HttpResult } from "./HttpResult.js";
 import { HttpStatusCode } from "./HttpStatusCode.js";
+import { HttpHeaderName } from "./HttpHeaderName.js";
+import { HttpMediaType } from "./HttpMediaType.js";
 import { HttpRouter } from "./routing/HttpRouter.js";
 
 export class HttpServer {
@@ -40,7 +42,7 @@ export class HttpServer {
       const result = await this._router.dispatch(context);
       if (!result.matched) {
         if (result.status === HttpStatusCode.MethodNotAllowed) {
-          res.setHeader("allow", result.allowedMethods.join(", "));
+          res.setHeader(HttpHeaderName.Allow, result.allowedMethods.join(", "));
           res.statusCode = HttpStatusCode.MethodNotAllowed;
           res.end("Method Not Allowed");
         } else {
@@ -95,13 +97,19 @@ export class HttpServer {
     ) {
       res.end();
     } else if (typeof body === "string" || Buffer.isBuffer(body)) {
-      if (!res.hasHeader("content-type")) {
-        res.setHeader("content-type", "text/plain; charset=utf-8");
+      if (!res.hasHeader(HttpHeaderName.ContentType)) {
+        res.setHeader(
+          HttpHeaderName.ContentType,
+          `${HttpMediaType.TextPlain}; charset=utf-8`,
+        );
       }
       res.end(body);
     } else {
-      if (!res.hasHeader("content-type")) {
-        res.setHeader("content-type", "application/json; charset=utf-8");
+      if (!res.hasHeader(HttpHeaderName.ContentType)) {
+        res.setHeader(
+          HttpHeaderName.ContentType,
+          `${HttpMediaType.ApplicationJson}; charset=utf-8`,
+        );
       }
       res.end(JSON.stringify(body));
     }

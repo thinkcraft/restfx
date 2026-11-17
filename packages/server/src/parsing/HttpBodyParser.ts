@@ -1,5 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import { HttpError } from "../HttpError.js";
+import { HttpHeaderName } from "../HttpHeaderName.js";
+import { HttpMediaType } from "../HttpMediaType.js";
 import { HttpStatusCode } from "../HttpStatusCode.js";
 
 export class HttpBodyParser {
@@ -8,12 +10,14 @@ export class HttpBodyParser {
       throw new RangeError("maxBytes must be a non-negative safe integer");
     }
 
-    const bodyFormat = this.getBodyFormat(req.headers["content-type"]);
+    const bodyFormat = this.getBodyFormat(
+      req.headers[HttpHeaderName.ContentType],
+    );
     if (bodyFormat === undefined) {
       req.resume();
       throw new HttpError(
         HttpStatusCode.UnsupportedMediaType,
-        "Content-Type must be application/json or application/x-www-form-urlencoded",
+        `Content-Type must be ${HttpMediaType.ApplicationJson}, ${HttpMediaType.ApplicationUrlEncoded}, or ${HttpMediaType.ApplicationOctetStream}`,
       );
     }
 
@@ -37,7 +41,7 @@ export class HttpBodyParser {
     }
 
     const body = Buffer.concat(chunks);
-    const contentLength = req.headers["content-length"];
+    const contentLength = req.headers[HttpHeaderName.ContentLength];
     if (contentLength !== undefined && Number(contentLength) !== body.length) {
       throw new HttpError(
         HttpStatusCode.BadRequest,
@@ -47,6 +51,10 @@ export class HttpBodyParser {
 
     if (bodyFormat === "urlencoded") {
       return this.parseUrlEncoded<T>(body);
+    }
+
+    if (bodyFormat === "binary") {
+      return body as T;
     }
 
     try {
@@ -64,12 +72,14 @@ export class HttpBodyParser {
 
   private getBodyFormat(contentType: string | undefined) {
     const mediaType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
-    if (mediaType === "application/x-www-form-urlencoded") return "urlencoded";
-    if (!mediaType?.startsWith("application/")) return undefined;
+    if (mediaType === HttpMediaType.ApplicationUrlEncoded) return "urlencoded";
+    if (mediaType === HttpMediaType.ApplicationOctetStream) return "binary";
+    const applicationPrefix = HttpMediaType.ApplicationJson.split("/")[0] + "/";
+    if (!mediaType?.startsWith(applicationPrefix)) return undefined;
 
-    const subtype = mediaType.slice("application/".length);
+    const subtype = mediaType.slice(applicationPrefix.length);
     if (
-      subtype === "json" ||
+      mediaType === HttpMediaType.ApplicationJson ||
       (subtype.endsWith("+json") && subtype.length > "+json".length)
     ) {
       return "json";

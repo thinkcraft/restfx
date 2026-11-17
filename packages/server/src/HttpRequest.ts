@@ -1,4 +1,5 @@
 import { IncomingMessage } from "node:http";
+import { HttpHeaderName } from "./HttpHeaderName.js";
 import { HttpBodyParser } from "./parsing/HttpBodyParser.js";
 
 export class HttpRequest {
@@ -18,9 +19,11 @@ export class HttpRequest {
   }
 
   constructor(readonly req: IncomingMessage) {
-    const proto = req.headers["x-forwarded-proto"] ?? "http";
+    const proto = req.headers[HttpHeaderName.XForwardedProto] ?? "http";
     const host =
-      req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost";
+      req.headers[HttpHeaderName.XForwardedHost] ??
+      req.headers[HttpHeaderName.Host] ??
+      "localhost";
 
     this.method = this.req.method?.toUpperCase() ?? "GET";
     this.url = new URL(req.url!, `${proto}://${host}`);

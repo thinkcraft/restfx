@@ -67,6 +67,17 @@ describe("HttpBodyParser", () => {
     });
   });
 
+  it("returns binary request bodies as a Buffer", async () => {
+    const body = Buffer.from([0x00, 0xff, 0x80, 0x41, 0x00]);
+    const request = createRequest(
+      [body.subarray(0, 2), body.subarray(2)],
+      body.byteLength,
+      "application/octet-stream",
+    );
+
+    assert.deepEqual(await parser.parse<Buffer>(request), body);
+  });
+
   it("rejects missing and unsupported Content-Type headers", async () => {
     for (const contentType of [null, "text/plain"]) {
       const request = createRequest(
@@ -81,7 +92,7 @@ describe("HttpBodyParser", () => {
           error instanceof HttpError &&
           error.status === HttpStatusCode.UnsupportedMediaType &&
           error.message ===
-            "Content-Type must be application/json or application/x-www-form-urlencoded",
+            "Content-Type must be application/json, application/x-www-form-urlencoded, or application/octet-stream",
       );
     }
   });

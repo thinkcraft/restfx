@@ -49,6 +49,11 @@ class PostsResource {
     }>();
   }
 
+  @HttpPost("binary")
+  async binary(ctx: HttpContext) {
+    return [...(await ctx.req.parseBody<Buffer>())];
+  }
+
   @HttpDelete()
   remove() {
     return new HttpResult(204);
@@ -145,6 +150,18 @@ describe("HttpServer resource decorators", () => {
     });
   });
 
+  it("parses binary request bodies without decoding their bytes", async () => {
+    const payload = Buffer.from([0x00, 0xff, 0x80, 0x41]);
+    const response = await fetch(`${baseUrl}/api/posts/binary`, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream" },
+      body: payload,
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), [...payload]);
+  });
+
   it("returns 400 for malformed JSON request bodies", async () => {
     const response = await fetch(`${baseUrl}/api/posts/echo`, {
       method: "POST",
@@ -168,7 +185,7 @@ describe("HttpServer resource decorators", () => {
     assert.equal(response.status, 415);
     assert.deepEqual(await response.json(), {
       message:
-        "Content-Type must be application/json or application/x-www-form-urlencoded",
+        "Content-Type must be application/json, application/x-www-form-urlencoded, or application/octet-stream",
     });
   });
 

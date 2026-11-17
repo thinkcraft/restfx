@@ -13,6 +13,8 @@ export { HttpRequest } from "./HttpRequest.js";
 export { HttpResponse } from "./HttpResponse.js";
 export { HttpResult } from "./HttpResult.js";
 export { HttpStatusCode } from "./HttpStatusCode.js";
+export { HttpHeaderName } from "./HttpHeaderName.js";
+export { HttpMediaType } from "./HttpMediaType.js";
 export { HttpBodyParser } from "./parsing/HttpBodyParser.js";
 export { HttpResource } from "./decorators/HttpResource.js";
 export {
