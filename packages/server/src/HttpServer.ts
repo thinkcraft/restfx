@@ -13,11 +13,9 @@ import { HttpError } from "./HttpError.js";
 import { HttpResult } from "./HttpResult.js";
 import { HttpStatusCode } from "./HttpStatusCode.js";
 import { HttpHeaderName } from "./HttpHeaderName.js";
-import { HttpMediaType } from "./HttpMediaType.js";
 import { HttpRouter } from "./routing/HttpRouter.js";
 import { IocContainer } from "./IocContainer.js";
 
-const streamClosed: unique symbol = Symbol("stream closed");
 const requestIdPattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/;
 
 export interface HttpServerOptions {
@@ -128,16 +126,17 @@ export class HttpServer {
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse) {
     const startedAt = performance.now();
+    const response = new HttpResponse(res);
     let context: HttpContext | undefined;
     try {
       const requestId = getRequestId(req.headers[HttpHeaderName.XRequestId]);
-      res.setHeader(HttpHeaderName.XRequestId, requestId);
+      response.setHeader(HttpHeaderName.XRequestId, requestId);
       context = new HttpContext(
         new HttpRequest(
           req,
           this._trustProxy?.(req.socket.remoteAddress) ?? false,
         ),
-        new HttpResponse(res),
+        response,
         requestId,
         this._container.createRequestScope(),
       );
@@ -145,9 +144,11 @@ export class HttpServer {
       const result = await this._router.dispatch(context);
       if (!result.matched) {
         if (result.status === HttpStatusCode.MethodNotAllowed) {
-          res.setHeader(HttpHeaderName.Allow, result.allowedMethods.join(", "));
-          await this.sendResult(
-            res,
+          response.setHeader(
+            HttpHeaderName.Allow,
+            result.allowedMethods.join(", "),
+          );
+          await response.send(
             new HttpResult(
               HttpStatusCode.MethodNotAllowed,
               "Method Not Allowed",
@@ -155,8 +156,7 @@ export class HttpServer {
             req.method === "HEAD",
           );
         } else {
-          await this.sendResult(
-            res,
+          await response.send(
             new HttpResult(HttpStatusCode.NotFound, "Not Found"),
             req.method === "HEAD",
           );
@@ -164,7 +164,7 @@ export class HttpServer {
         return;
       }
 
-      await this.sendResult(res, result.value, req.method === "HEAD");
+      await response.send(result.value, req.method === "HEAD");
     } catch (error) {
       this.notifyError(error, context);
       if (req.aborted || res.destroyed || res.writableEnded) return;
@@ -186,7 +186,7 @@ export class HttpServer {
         result = this.createDefaultErrorResult(error);
       }
 
-      await this.sendResult(res, result, req.method === "HEAD");
+      await response.send(result, req.method === "HEAD");
     } finally {
       if (context) {
         this.notify(this._onResponse, context, {
@@ -235,165 +235,9 @@ export class HttpServer {
     res.shouldKeepAlive = false;
     res.setHeader("connection", "close");
   }
-
-  private async sendResult(
-    res: ServerResponse,
-    value: unknown,
-    headRequest = false,
-  ) {
-    if (res.writableEnded) return;
-
-    const result =
-      value instanceof HttpResult ? value : new HttpResult(undefined, value);
-    const body = result.body;
-    res.statusCode =
-      result.status ??
-      (body === undefined ? HttpStatusCode.NoContent : HttpStatusCode.Ok);
-
-    for (const [name, headerValue] of Object.entries(result.headers ?? {})) {
-      res.setHeader(name, headerValue);
-    }
-
-    if (
-      body === undefined ||
-      res.statusCode === HttpStatusCode.NoContent ||
-      res.statusCode === HttpStatusCode.NotModified
-    ) {
-      res.end();
-    } else if (typeof body === "string" || Buffer.isBuffer(body)) {
-      const output = body;
-      if (!res.hasHeader(HttpHeaderName.ContentType)) {
-        res.setHeader(
-          HttpHeaderName.ContentType,
-          `${HttpMediaType.TextPlain}; charset=utf-8`,
-        );
-      }
-      if (headRequest) {
-        if (!res.hasHeader(HttpHeaderName.ContentLength)) {
-          res.setHeader(
-            HttpHeaderName.ContentLength,
-            Buffer.isBuffer(output)
-              ? output.byteLength
-              : Buffer.byteLength(output),
-          );
-        }
-        res.end();
-      } else {
-        res.end(output);
-      }
-    } else if (isAsyncIterable(body)) {
-      if (headRequest) {
-        res.end();
-      } else {
-        await this.sendStream(res, body);
-      }
-    } else {
-      const output = JSON.stringify(body);
-      if (!res.hasHeader(HttpHeaderName.ContentType)) {
-        res.setHeader(
-          HttpHeaderName.ContentType,
-          `${HttpMediaType.ApplicationJson}; charset=utf-8`,
-        );
-      }
-      if (headRequest) {
-        if (!res.hasHeader(HttpHeaderName.ContentLength)) {
-          res.setHeader(
-            HttpHeaderName.ContentLength,
-            output === undefined ? 0 : Buffer.byteLength(output),
-          );
-        }
-        res.end();
-      } else {
-        res.end(output);
-      }
-    }
-  }
-
-  private async sendStream(res: ServerResponse, body: AsyncIterable<unknown>) {
-    const iterator = body[Symbol.asyncIterator]();
-    let closeHandler!: () => void;
-    const closed = new Promise<void>((resolve) => {
-      closeHandler = resolve;
-      res.once("close", closeHandler);
-    });
-    const closedResult = closed.then((): typeof streamClosed => streamClosed);
-    let completed = false;
-
-    try {
-      while (!res.destroyed) {
-        const next = await Promise.race([iterator.next(), closedResult]);
-        if (next === streamClosed) return;
-        if (next.done) {
-          completed = true;
-          break;
-        }
-
-        const chunk = next.value;
-        if (typeof chunk !== "string" && !(chunk instanceof Uint8Array)) {
-          throw new TypeError(
-            "Streaming response chunks must be strings or Uint8Array values",
-          );
-        }
-        if (!res.hasHeader(HttpHeaderName.ContentType)) {
-          res.setHeader(HttpHeaderName.ContentType, "application/octet-stream");
-        }
-
-        if (!res.write(chunk) && !(await waitForDrain(res))) return;
-      }
-
-      if (!res.destroyed && !res.writableEnded) {
-        if (!res.hasHeader(HttpHeaderName.ContentType)) {
-          res.setHeader(HttpHeaderName.ContentType, "application/octet-stream");
-        }
-        res.end();
-      }
-    } finally {
-      res.off("close", closeHandler);
-      if (!completed) {
-        void Promise.resolve(iterator.return?.()).catch(() => {});
-      }
-    }
-  }
 }
 
 function getRequestId(value: string | string[] | undefined) {
   if (typeof value === "string" && requestIdPattern.test(value)) return value;
   return randomUUID();
-}
-
-function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
-  return (
-    value !== null &&
-    value !== undefined &&
-    typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] ===
-      "function"
-  );
-}
-
-function waitForDrain(res: ServerResponse) {
-  if (res.destroyed || !res.writable) return Promise.resolve(false);
-
-  return new Promise<boolean>((resolve, reject) => {
-    const cleanup = () => {
-      res.off("drain", onDrain);
-      res.off("close", onClose);
-      res.off("error", onError);
-    };
-    const onDrain = () => {
-      cleanup();
-      resolve(true);
-    };
-    const onClose = () => {
-      cleanup();
-      resolve(false);
-    };
-    const onError = (error: Error) => {
-      cleanup();
-      reject(error);
-    };
-
-    res.once("drain", onDrain);
-    res.once("close", onClose);
-    res.once("error", onError);
-  });
 }
