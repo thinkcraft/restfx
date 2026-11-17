@@ -78,7 +78,7 @@ export class HttpRequest {
       ? this.getSingleHeader(HttpHeaderName.XForwardedHost)
       : undefined;
     const proto = this.validateProtocol(forwardedProto ?? "http");
-    const host = this.validateHost(
+    const url = this.validateHost(
       forwardedHost ?? this.getSingleHeader(HttpHeaderName.Host) ?? "localhost",
       proto,
     );
@@ -94,15 +94,10 @@ export class HttpRequest {
     }
 
     try {
-      const baseUrl = new URL(`${proto}://${host}`);
-      const url = new URL(
-        requestTarget === "*" ? "/*" : requestTarget,
-        baseUrl,
-      );
-      if (url.origin !== baseUrl.origin) {
-        // noinspection ExceptionCaughtLocallyJS
-        throw new Error("Request target changed the URL origin");
-      }
+      // Request targets are restricted to origin-form (or "*") above, so the
+      // validated host URL can be reused without allowing the target to change
+      // its authority.
+      url.href = `${url.origin}${requestTarget === "*" ? "/*" : requestTarget}`;
       this.url = url;
     } catch {
       throw new HttpError(HttpStatusCode.BadRequest, "Invalid request URL");
@@ -144,7 +139,7 @@ export class HttpRequest {
         // noinspection ExceptionCaughtLocallyJS
         throw new Error("Invalid host authority");
       }
-      return parsed.host;
+      return parsed;
     } catch {
       throw new HttpError(HttpStatusCode.BadRequest, "Invalid Host header");
     }
