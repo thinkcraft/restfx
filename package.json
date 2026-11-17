@@ -21,6 +21,9 @@
     "build": "tsc -b",
     "clean": "tsc -b --clean",
     "dev": "pnpm --filter @restfx/playground dev",
+    "docs:dev": "pnpm --filter @restfx/docs dev",
+    "docs:build": "pnpm --filter @restfx/docs build",
+    "docs:preview": "pnpm --filter @restfx/docs preview",
     "typecheck": "tsc -b --pretty false",
     "start": "tsx packages/server/src",
     "test": "pnpm --filter @restfx/* test"

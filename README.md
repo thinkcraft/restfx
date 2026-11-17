@@ -19,6 +19,7 @@ client runtime concerns into their own packages.
   resources, middleware, routing, and request-body parsing. See the
   [server README](packages/server/README.md) for usage and behavior.
 - `apps/playground` — runnable example application.
+- `apps/docs` — Astro Starlight documentation site.
 
 ## Framework features
 
@@ -58,6 +59,7 @@ See the package guides below for the exact APIs, supported behavior, and example
 
 ## Guides
 
+- [Documentation site](apps/docs/README.md) — run and build the Starlight site.
 - [Core models and validation](packages/core/README.md) — define shared models,
   field constraints, nested models, and cross-field validation.
 - [HTTP server](packages/server/README.md) — routes, middleware, request
@@ -233,6 +235,8 @@ pnpm build       # build all TypeScript projects
 pnpm typecheck   # type-check all projects
 pnpm test        # run workspace tests
 pnpm clean       # clean TypeScript build outputs
+pnpm docs:dev    # develop the documentation site
+pnpm docs:build  # build the static documentation site
 ```
 
 The server package also includes a routing benchmark:
