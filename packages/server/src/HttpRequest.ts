@@ -129,6 +129,7 @@ export class HttpRequest {
         parsed.search !== "" ||
         parsed.hash !== ""
       ) {
+        // noinspection ExceptionCaughtLocallyJS
         throw new Error("Invalid host authority");
       }
       return parsed.host;
