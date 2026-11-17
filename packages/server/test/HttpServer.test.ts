@@ -23,6 +23,14 @@ class PostsResource {
     return { id: ctx.req.params.id };
   }
 
+  @HttpGet(":id/comments")
+  getComments(ctx: HttpContext) {
+    return [
+      { id: "c1", parentId: ctx.req.params.id },
+      { id: "c2", parentId: ctx.req.params.id },
+    ];
+  }
+
   @HttpPost("create")
   create() {
     return new HttpResult(201, { id: 2 });
@@ -70,6 +78,16 @@ describe("HttpServer resource decorators", () => {
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), [{ id: 1, title: "First post" }]);
+  });
+
+  it("dispatches to handlers on nested route", async () => {
+    const response = await fetch(`${baseUrl}/api/posts/1/comments`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), [
+      { id: "c1", parentId: "1" },
+      { id: "c2", parentId: "1" },
+    ]);
   });
 
   it("registers instance resource fields", async () => {
