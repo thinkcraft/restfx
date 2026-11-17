@@ -237,6 +237,62 @@ data returns `422` with field-path issues. Response models validate JSON results
 and strip undeclared fields. They do not apply to raw streamed responses or
 streamed request bodies.
 
+### OpenAPI
+
+Install the OpenAPI endpoint as middleware on the root resource. The endpoint is
+available on `GET` and `HEAD`, supports `OPTIONS`, and root-resource middleware
+still runs before the document response. The document is generated on the first
+matching `GET` or `HEAD` request, then cached and reused:
+
+```ts
+@OpenApiMiddleware({
+  path: "/docs/openapi.json",
+  info: { title: "Example API", version: "1.0.0" },
+  servers: [{ url: "https://api.example.com" }],
+  securitySchemes: {
+    bearerAuth: { type: "http", scheme: "bearer" },
+  },
+  security: [{ bearerAuth: [] }],
+})
+@HttpResource()
+class ApiResource {}
+
+const server = new HttpServer(ApiResource);
+```
+
+Routes contribute their HTTP methods and paths, inferred required path
+parameters, request and response model schemas, and standard request-validation
+responses. Optional final path segments are represented by both path variants.
+Operation details are fields on the normal route decorator options. Add
+query/header/cookie parameters and status-specific responses there as well.
+Unless specified, `operationId` defaults to the decorated method name. Optional
+path variants receive `Without<Parameter>` and `With<Parameter>` suffixes. IDs
+must be unique. Repeated method names receive no default ID; set an explicit
+`operationId` when one is needed:
+
+```ts
+@HttpGet(":id", {
+  summary: "Get a user",
+  operationId: "getUser",
+  tags: ["users"],
+  parameters: [
+    { name: "include", in: "query", schema: { type: "boolean" } },
+  ],
+  responses: { "404": { description: "User not found" } },
+})
+getUser() {}
+```
+
+Built-in field types, `ArrayOf`, and model constraints are translated to JSON
+Schema. Use semantic field types such as `UUID` and `Email` instead of a plain
+`StringField` when appropriate; their validation and formats (for example,
+`format: "uuid"`) are both generated automatically. Custom types can provide a
+`schema` fragment in `@Field` options, but that metadata does not replace runtime
+validation. Response descriptions and schemas for non-model results should be
+declared in route `responses`. The endpoint path must not overlap an application
+route. This generates the JSON document only; it does not bundle an API explorer
+UI.
+
 ### Raw streaming uploads
 
 For large uploads, send one binary object per request and consume the raw body

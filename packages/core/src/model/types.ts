@@ -15,6 +15,8 @@ export interface FieldOptions<T = unknown> {
   readonly nullable?: boolean;
   /** Applied only when the property is omitted; object defaults are cloned. */
   readonly default?: T;
+  /** Optional JSON Schema fragment for custom field types and formats. */
+  readonly schema?: Readonly<Record<string, unknown>>;
   readonly description?: string;
   readonly examples?: readonly T[];
   readonly deprecated?: boolean;

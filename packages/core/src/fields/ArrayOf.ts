@@ -3,7 +3,7 @@ import type { FieldType, FieldTypeConstructor } from "./FieldType.js";
 export function ArrayOf<T>(
   itemType: FieldTypeConstructor<T>,
 ): FieldTypeConstructor<T[]> {
-  return class ArrayField implements FieldType<T[]> {
+  class ArrayField implements FieldType<T[]> {
     validate(value: unknown) {
       if (!Array.isArray(value)) return "Expected an array";
 
@@ -14,5 +14,8 @@ export function ArrayOf<T>(
       }
       return undefined;
     }
-  };
+  }
+
+  Object.defineProperty(ArrayField, "itemType", { value: itemType });
+  return ArrayField;
 }

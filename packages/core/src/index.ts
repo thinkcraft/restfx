@@ -30,5 +30,6 @@ export {
   IntegerField,
   NumberField,
   StringField,
+  UUID,
 } from "./fields/index.js";
 export type { FieldType, FieldTypeConstructor } from "./fields/index.js";

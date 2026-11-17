@@ -1,9 +1,17 @@
 import { registerHandler } from "../metadata/ResourceMetadata.js";
 import type { ModelConstructor } from "@framework/core";
+import type {
+  HttpOperationOptions,
+  HttpRequestBodyOptions,
+  HttpResponseOptions,
+} from "../openapi/types.js";
 
-export interface HttpRouteOptions {
+export interface HttpRouteOptions extends HttpOperationOptions {
   readonly body?: ModelConstructor;
   readonly response?: ModelConstructor;
+  readonly requestBody?: HttpRequestBodyOptions;
+  readonly responses?: Readonly<Record<string, HttpResponseOptions>>;
+  readonly operation?: HttpOperationOptions;
 }
 
 export function HttpMethod(
@@ -20,6 +28,18 @@ export function HttpMethod(
       name: context.name,
       bodyModel: options.body,
       responseModel: options.response,
+      operation: {
+        summary: options.summary,
+        description: options.description,
+        operationId: options.operationId,
+        tags: options.tags,
+        deprecated: options.deprecated,
+        parameters: options.parameters,
+        security: options.security,
+        ...options.operation,
+      },
+      requestBody: options.requestBody,
+      responses: options.responses,
     });
   };
 }

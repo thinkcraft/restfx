@@ -11,6 +11,7 @@ import { Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { after, before, describe, it } from "node:test";
 import {
+  ArrayOf,
   HttpContext,
   HttpDelete,
   HttpGet,
@@ -24,8 +25,11 @@ import {
   Email,
   Field,
   Model,
+  OpenApiMiddleware,
   StringField,
+  UUID,
 } from "../src";
+import { createOpenApiRequestMiddleware } from "../src/decorators/OpenApiMiddleware.js";
 
 @Model()
 class CreateUserModel {
@@ -37,6 +41,18 @@ class CreateUserModel {
 
   @Field({ type: StringField, optional: true })
   nickname?: string;
+
+  @Field({
+    type: UUID,
+    optional: true,
+  })
+  externalId?: string;
+
+  @Field({ type: ArrayOf(StringField), optional: true, minItems: 1 })
+  roles?: string[];
+
+  @Field({ type: StringField, nullable: true, default: null })
+  optionalLabel!: string | null;
 }
 
 @Model()
@@ -57,7 +73,25 @@ class PostsResource {
     return [{ id: 1, title: "First post" }];
   }
 
-  @HttpGet(":id")
+  @HttpGet(":id", {
+    summary: "Get a post",
+    operationId: "getPost",
+    tags: ["posts"],
+    parameters: [
+      {
+        name: "includeComments",
+        in: "query",
+        description: "Include comments in the result",
+        schema: { type: "boolean", default: false },
+      },
+      {
+        name: "x-client-id",
+        in: "header",
+        required: true,
+        schema: { type: "string" },
+      },
+    ],
+  })
   getPost(ctx: HttpContext) {
     return { id: ctx.req.params.id };
   }
@@ -112,7 +146,14 @@ class PostsResource {
     });
   }
 
-  @HttpPost("create")
+  @HttpPost("create", {
+    responses: {
+      "201": {
+        description: "Post created",
+        schema: { type: "object", properties: { id: { type: "number" } } },
+      },
+    },
+  })
   create() {
     return new HttpResult(201, { id: 2 });
   }
@@ -147,7 +188,13 @@ class UsersResource {
     return [{ id: "u1" }];
   }
 
-  @HttpPost("", { body: CreateUserModel, response: UserResponseModel })
+  @HttpPost("", {
+    body: CreateUserModel,
+    response: UserResponseModel,
+    responses: {
+      "409": { description: "A user with this email already exists" },
+    },
+  })
   async create(context: HttpContext) {
     const input = await context.req.parseBody<CreateUserModel>();
     return {
@@ -350,6 +397,31 @@ class TestApi {
   readonly uploads = new UploadResource();
 }
 
+@OpenApiMiddleware({
+  path: "/reference/openapi.json",
+  info: { title: "Test API", version: "1.2.3" },
+  servers: [{ url: "https://api.example.test" }],
+  security: [{ bearerAuth: [] }],
+  securitySchemes: {
+    bearerAuth: { type: "http", scheme: "bearer" },
+  },
+})
+@HttpResource()
+class OpenApiTestApi {
+  @HttpResource()
+  readonly api = new TestApi();
+}
+
+@OpenApiMiddleware({
+  path: "/api/posts/123",
+  info: { title: "Test API", version: "1" },
+})
+@HttpResource()
+class ConflictingOpenApiApi {
+  @HttpResource()
+  readonly api = new TestApi();
+}
+
 const middlewareTrace: string[] = [];
 
 async function rootMiddleware(
@@ -361,6 +433,18 @@ async function rootMiddleware(
   const result = await next();
   middlewareTrace.push("root:after");
   return result;
+}
+
+@OpenApiMiddleware({
+  info: { title: "Middleware API", version: "1" },
+})
+@HttpMiddleware(rootMiddleware)
+@HttpResource()
+class OpenApiMiddlewareApi {
+  @HttpGet("status", { summary: "Get API status" })
+  status() {
+    return { online: true };
+  }
 }
 
 async function sharedResourceMiddleware(
@@ -457,6 +541,218 @@ describe("HttpServer resource decorators", () => {
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { isInstance: true });
+  });
+
+  describe("OpenAPI middleware", () => {
+    const openApiServer = new HttpServer(OpenApiTestApi);
+    let openApiBaseUrl: string;
+
+    before(async () => {
+      const listeningServer = openApiServer.listen(0);
+      await once(listeningServer, "listening");
+      const address = listeningServer.address() as AddressInfo;
+      openApiBaseUrl = `http://127.0.0.1:${address.port}`;
+    });
+
+    after(async () => {
+      await openApiServer.close();
+    });
+
+    const fetchDocument = async () => {
+      const response = await fetch(`${openApiBaseUrl}/reference/openapi.json`);
+      assert.equal(response.status, 200);
+      return {
+        response,
+        document: (await response.json()) as {
+          openapi: string;
+          info: { title: string; version: string };
+          servers: Array<{ url: string }>;
+          security: Array<Record<string, string[]>>;
+          paths: Record<string, Record<string, Record<string, any>>>;
+          components: {
+            schemas: Record<string, Record<string, any>>;
+            securitySchemes: Record<string, Record<string, string>>;
+          };
+        },
+      };
+    };
+
+    it("generates document metadata and security configuration", async () => {
+      const { response, document } = await fetchDocument();
+
+      assert.match(
+        response.headers.get("content-type") ?? "",
+        /application\/json/,
+      );
+      assert.equal(document.openapi, "3.1.0");
+      assert.deepEqual(document.info, { title: "Test API", version: "1.2.3" });
+      assert.deepEqual(document.servers, [{ url: "https://api.example.test" }]);
+      assert.deepEqual(document.security, [{ bearerAuth: [] }]);
+      assert.equal(
+        document.components.securitySchemes.bearerAuth.scheme,
+        "bearer",
+      );
+    });
+
+    it("generates operations, parameters, and optional path variants", async () => {
+      const { document } = await fetchDocument();
+
+      assert.equal(
+        document.paths["/api/posts/featured"].get.operationId,
+        "getFeaturedPost",
+      );
+      assert.equal(document.paths["/api/posts/{id}"].get.summary, "Get a post");
+      assert.equal(
+        document.paths["/api/posts/{id}"].get.operationId,
+        "getPost",
+      );
+      assert.deepEqual(document.paths["/api/posts/{id}"].get.tags, ["posts"]);
+      assert.deepEqual(document.paths["/api/posts/{id}"].get.security, [
+        { bearerAuth: [] },
+      ]);
+      assert.equal(document.paths["/api/posts"].get.operationId, undefined);
+      assert.equal(document.paths["/api/users"].get.operationId, undefined);
+
+      const parameters = document.paths["/api/posts/{id}"].get.parameters;
+      assert.deepEqual(parameters[0], {
+        name: "id",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      });
+      assert.equal(parameters[1].in, "query");
+      assert.equal(parameters[2].in, "header");
+      assert.equal(
+        document.paths["/api/posts/optional"].get.operationId,
+        "getOptionalPostWithoutId",
+      );
+      assert.equal(
+        document.paths["/api/posts/optional/{id}"].get.operationId,
+        "getOptionalPostWithId",
+      );
+    });
+
+    it("generates request, response, validation, and model schemas", async () => {
+      const { document } = await fetchDocument();
+
+      assert.equal(
+        document.paths["/api/posts/create"].post.responses["201"].description,
+        "Post created",
+      );
+      assert.equal(
+        document.paths["/api/posts/create"].post.responses["200"],
+        undefined,
+      );
+
+      const createUser = document.paths["/api/users"].post;
+      assert.equal(
+        createUser.requestBody.content["application/json"].schema.$ref,
+        "#/components/schemas/CreateUserModel",
+      );
+      assert.ok(createUser.responses["422"]);
+      assert.ok(createUser.responses["409"]);
+      assert.ok(createUser.responses["500"]);
+      assert.equal(
+        createUser.responses["200"].content["application/json"].schema.$ref,
+        "#/components/schemas/UserResponseModel",
+      );
+
+      const userSchema = document.components.schemas.CreateUserModel;
+      assert.deepEqual(userSchema.required, ["email", "name"]);
+      assert.equal(userSchema.properties.email.format, "email");
+      assert.equal(userSchema.properties.externalId.format, "uuid");
+      assert.deepEqual(userSchema.properties.optionalLabel, {
+        default: null,
+        anyOf: [{ type: "string" }, { type: "null" }],
+      });
+      assert.deepEqual(userSchema.properties.roles, {
+        type: "array",
+        items: { type: "string" },
+        minItems: 1,
+      });
+    });
+
+    it("supports GET, HEAD, OPTIONS, rejects other methods, and falls through", async () => {
+      const headResponse = await fetch(
+        `${openApiBaseUrl}/reference/openapi.json`,
+        { method: "HEAD" },
+      );
+      assert.equal(headResponse.status, 200);
+      assert.equal(await headResponse.text(), "");
+
+      const optionsResponse = await fetch(
+        `${openApiBaseUrl}/reference/openapi.json`,
+        { method: "OPTIONS" },
+      );
+      assert.equal(optionsResponse.status, 204);
+      assert.equal(optionsResponse.headers.get("allow"), "GET, HEAD, OPTIONS");
+
+      const unsupportedMethod = await fetch(
+        `${openApiBaseUrl}/reference/openapi.json`,
+        { method: "POST" },
+      );
+      assert.equal(unsupportedMethod.status, 405);
+      assert.equal(
+        unsupportedMethod.headers.get("allow"),
+        "GET, HEAD, OPTIONS",
+      );
+
+      const unrelatedPath = await fetch(
+        `${openApiBaseUrl}/reference/not-openapi.json`,
+      );
+      assert.equal(unrelatedPath.status, 404);
+    });
+
+    it("reuses the same generated document for every matching request", async () => {
+      const middleware = createOpenApiRequestMiddleware([], {
+        path: "/cached.json",
+        info: { title: "Cached API", version: "1" },
+      });
+      const context = {
+        req: { path: "/cached.json", method: "GET" },
+      } as unknown as HttpContext;
+      const unexpectedNext = async () => {
+        throw new Error("The OpenAPI middleware should handle this path");
+      };
+
+      const first = await middleware(context, unexpectedNext);
+      const second = await middleware(context, unexpectedNext);
+
+      assert.strictEqual(first, second);
+    });
+
+    it("generates the document only when its endpoint is requested", async () => {
+      const middleware = createOpenApiRequestMiddleware([], {
+        path: "/lazy.json",
+        info: { title: "", version: "1" },
+      });
+      const unrelatedContext = {
+        req: { path: "/elsewhere", method: "GET" },
+      } as unknown as HttpContext;
+      const endpointContext = {
+        req: { path: "/lazy.json", method: "GET" },
+      } as unknown as HttpContext;
+
+      assert.equal(
+        await middleware(unrelatedContext, async () => "next"),
+        "next",
+      );
+      assert.throws(
+        () => middleware(endpointContext, async () => "unexpected next"),
+        /OpenAPI info requires non-empty title and version/,
+      );
+    });
+
+    it("rejects invalid endpoint paths", () => {
+      assert.throws(
+        () =>
+          createOpenApiRequestMiddleware([], {
+            path: "relative/openapi.json",
+            info: { title: "Invalid API", version: "1" },
+          }),
+        /OpenAPI endpoint path must be an absolute URL path/,
+      );
+    });
   });
 
   it("returns structured validation issues for invalid request models", async () => {
@@ -1066,6 +1362,27 @@ describe("HttpServer route validation", () => {
       message: "Optional route parameters must be the final path segment",
     });
   });
+
+  it("lets OpenAPI middleware take over a matching application path", async () => {
+    const openApiServer = new HttpServer(ConflictingOpenApiApi);
+    const listeningServer = openApiServer.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/api/posts/123`,
+      );
+      const document = (await response.json()) as {
+        info: { title: string; version: string };
+      };
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(document.info, { title: "Test API", version: "1" });
+    } finally {
+      await openApiServer.close();
+    }
+  });
 });
 
 describe("HttpServer proxy handling", () => {
@@ -1226,5 +1543,31 @@ describe("HttpMiddleware decorator", () => {
       "resource:after",
       "root:after",
     ]);
+  });
+
+  it("runs root middleware for the generated OpenAPI endpoint", async () => {
+    const docsServer = new HttpServer(OpenApiMiddlewareApi);
+    const listeningServer = docsServer.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+    middlewareTrace.length = 0;
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/openapi.json`,
+      );
+
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("x-root-middleware"), "ran");
+      const document = (await response.json()) as {
+        openapi: string;
+        paths: Record<string, Record<string, { summary?: string }>>;
+      };
+      assert.equal(document.openapi, "3.1.0");
+      assert.equal(document.paths["/status"].get.summary, "Get API status");
+      assert.deepEqual(middlewareTrace, ["root:before", "root:after"]);
+    } finally {
+      await docsServer.close();
+    }
   });
 });

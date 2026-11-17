@@ -10,6 +10,7 @@ import {
   ModelValidationError,
   NumberField,
   StringField,
+  UUID,
   validateModel,
 } from "../src";
 
@@ -105,6 +106,12 @@ class SpecialPropertyModel {
   ["__proto__"]!: string;
 }
 
+@Model()
+class UUIDModel {
+  @Field({ type: UUID })
+  id!: string;
+}
+
 class UndecoratedModel {}
 
 function captureModelError(action: () => unknown) {
@@ -122,6 +129,18 @@ function assertModelData(actual: object, expected: object) {
 }
 
 describe("shared model decorators", () => {
+  it("validates canonical UUID field values", () => {
+    assertModelData(
+      validateModel({ id: "550e8400-e29b-41d4-a716-446655440000" }, UUIDModel),
+      { id: "550e8400-e29b-41d4-a716-446655440000" },
+    );
+    const error = captureModelError(() =>
+      validateModel({ id: "not-a-uuid" }, UUIDModel),
+    );
+    assert.equal(error.issues[0]?.path, "id");
+    assert.equal(error.issues[0]?.message, "Expected a valid UUID");
+  });
+
   it("validates fields and returns a model instance with declared fields", () => {
     const value = validateModel(
       {

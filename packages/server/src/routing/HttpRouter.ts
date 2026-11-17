@@ -1,5 +1,6 @@
 import type { HttpContext } from "../HttpContext.js";
 import {
+  getResourceRequestMiddlewareFactories,
   getResourceMiddlewares,
   getResourceMetadata,
   type HttpMiddlewareHandler,
@@ -21,15 +22,65 @@ import { validateModel } from "@framework/core";
 /** Discovers decorated resources and dispatches contexts to matching handlers. */
 export class HttpRouter {
   private readonly _routes: RadixRouter;
+  private readonly _routeDefinitions: Route[];
+  private readonly _requestMiddlewares: Array<{
+    readonly resource: object;
+    readonly handler: HttpMiddlewareHandler;
+  }> = [];
+  private _rootResource!: object;
+  private _rootMiddlewares: Route["middlewares"] = [];
 
   constructor(rootResource: ResourceConstructor) {
     this._routes = new RadixRouter();
-    for (const route of this.buildRoutes(rootResource)) {
+    this._routeDefinitions = this.buildRoutes(rootResource);
+    for (const route of this._routeDefinitions) {
       this._routes.add(route);
+    }
+    for (const createMiddleware of getResourceRequestMiddlewareFactories(
+      rootResource,
+    )) {
+      this._requestMiddlewares.push({
+        resource: this._rootResource,
+        handler: createMiddleware({
+          routes: this._routeDefinitions,
+        }),
+      });
     }
   }
 
   async dispatch(context: HttpContext): Promise<HttpRouterResult> {
+    const middlewares = [...this._rootMiddlewares, ...this._requestMiddlewares];
+    const invokeMiddleware = async (
+      index: number,
+    ): Promise<HttpRouterResult> => {
+      const middleware = middlewares[index];
+      if (!middleware) return this.dispatchRoute(context);
+
+      let downstream: Promise<HttpRouterResult> | undefined;
+      const next = () => {
+        if (downstream) {
+          throw new Error("HTTP middleware called next() more than once");
+        }
+        downstream = invokeMiddleware(index + 1);
+        return downstream.then((result) =>
+          result.matched ? result.value : undefined,
+        );
+      };
+      const value = await (middleware.handler as HttpMiddlewareHandler).call(
+        middleware.resource,
+        context,
+        next,
+      );
+
+      if (!downstream) return { matched: true, value };
+      const downstreamResult = await downstream;
+      return value === undefined ? downstreamResult : { matched: true, value };
+    };
+
+    return invokeMiddleware(0);
+  }
+
+  private async dispatchRoute(context: HttpContext): Promise<HttpRouterResult> {
     const path = context.req.path;
     const method = context.req.method;
     const matches = this._routes.match(path);
@@ -74,8 +125,11 @@ export class HttpRouter {
       }
       return await match.route.handler.call(match.route.resource, context);
     };
+    const routeMiddlewares = match.route.middlewares.slice(
+      this._rootMiddlewares.length,
+    );
     const invokeMiddleware = async (index: number): Promise<unknown> => {
-      const middleware = match.route.middlewares[index];
+      const middleware = routeMiddlewares[index];
       if (!middleware) return invokeHandler();
 
       let downstream: Promise<unknown> | undefined;
@@ -155,6 +209,7 @@ export class HttpRouter {
           handler,
         })),
       ];
+      if (resource === this._rootResource) this._rootMiddlewares = middlewares;
 
       for (const [handler, handlerMetadata] of getResourceHandlers(resource)) {
         const path = joinPaths(basePath, handlerMetadata.path);
@@ -164,9 +219,13 @@ export class HttpRouter {
           specificity: getPathSpecificity(path),
           resource,
           handler,
+          name: handlerMetadata.name,
           middlewares,
           bodyModel: handlerMetadata.bodyModel,
           responseModel: handlerMetadata.responseModel,
+          operation: handlerMetadata.operation,
+          requestBody: handlerMetadata.requestBody,
+          responses: handlerMetadata.responses,
         });
       }
 
@@ -196,7 +255,8 @@ export class HttpRouter {
       ancestors.delete(resource);
     };
 
-    visit(new rootResource(), "", []);
+    this._rootResource = new rootResource();
+    visit(this._rootResource, "", []);
 
     const registeredRoutes = new Set<string>();
     for (const route of routes) {

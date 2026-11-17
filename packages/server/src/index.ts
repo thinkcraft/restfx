@@ -25,6 +25,7 @@ export type {
 } from "./parsing/parseMultipartBody.js";
 export { HttpResource } from "./decorators/HttpResource.js";
 export { HttpMiddleware } from "./decorators/HttpMiddleware.js";
+export { OpenApiMiddleware } from "./decorators/OpenApiMiddleware.js";
 export type { HttpMiddlewareHandler } from "./metadata/ResourceMetadata.js";
 export {
   HttpDelete,
@@ -35,6 +36,16 @@ export {
   HttpPut,
 } from "./decorators/HttpMethod.js";
 export type { HttpRouteOptions } from "./decorators/HttpMethod.js";
+export type {
+  HttpOperationOptions,
+  HttpParameterOptions,
+  HttpRequestBodyOptions,
+  HttpResponseOptions,
+  OpenApiDocument,
+  OpenApiInfo,
+  OpenApiOptions,
+  OpenApiSchema,
+} from "./openapi/types.js";
 export type { HttpParseBodyOptions } from "./HttpRequest.js";
 export {
   ArrayOf,
@@ -46,6 +57,7 @@ export {
   ModelValidationError,
   NumberField,
   StringField,
+  UUID,
   getModelMetadata,
   validateModel,
 } from "@framework/core";
