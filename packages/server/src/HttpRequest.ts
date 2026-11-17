@@ -4,6 +4,10 @@ export class HttpRequest {
   readonly url: URL;
   params: Record<string, string> = {};
 
+  get method() {
+    return this.req.method?.toUpperCase() ?? "GET";
+  }
+
   get status() {
     return this.req.statusCode;
   }

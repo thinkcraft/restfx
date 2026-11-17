@@ -10,7 +10,8 @@ import { HttpContext } from "./HttpContext.js";
 import { HttpResponse } from "./HttpResponse.js";
 import { HttpError } from "./HttpError.js";
 import { HttpResult } from "./HttpResult.js";
-import { HttpRouter } from "./HttpRouter.js";
+import { HttpStatusCode } from "./HttpStatusCode.js";
+import { HttpRouter } from "./routing/HttpRouter.js";
 
 export class HttpServer {
   private readonly _server: Server;
@@ -38,12 +39,12 @@ export class HttpServer {
     try {
       const result = await this._router.dispatch(context);
       if (!result.matched) {
-        if (result.status === 405) {
+        if (result.status === HttpStatusCode.MethodNotAllowed) {
           res.setHeader("allow", result.allowedMethods.join(", "));
-          res.statusCode = 405;
+          res.statusCode = HttpStatusCode.MethodNotAllowed;
           res.end("Method Not Allowed");
         } else {
-          res.statusCode = 404;
+          res.statusCode = HttpStatusCode.NotFound;
           res.end("Not Found");
         }
         return;
@@ -66,7 +67,9 @@ export class HttpServer {
 
       this.sendResult(
         res,
-        new HttpResult(500, { message: "Internal Server Error" }),
+        new HttpResult(HttpStatusCode.InternalServerError, {
+          message: "Internal Server Error",
+        }),
       );
     }
   }
@@ -77,7 +80,9 @@ export class HttpServer {
     const result =
       value instanceof HttpResult ? value : new HttpResult(undefined, value);
     const body = result.body;
-    res.statusCode = result.status ?? (body === undefined ? 204 : 200);
+    res.statusCode =
+      result.status ??
+      (body === undefined ? HttpStatusCode.NoContent : HttpStatusCode.Ok);
 
     for (const [name, headerValue] of Object.entries(result.headers ?? {})) {
       res.setHeader(name, headerValue);
@@ -85,8 +90,8 @@ export class HttpServer {
 
     if (
       body === undefined ||
-      res.statusCode === 204 ||
-      res.statusCode === 304
+      res.statusCode === HttpStatusCode.NoContent ||
+      res.statusCode === HttpStatusCode.NotModified
     ) {
       res.end();
     } else if (typeof body === "string" || Buffer.isBuffer(body)) {

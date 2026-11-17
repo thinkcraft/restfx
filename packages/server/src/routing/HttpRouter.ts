@@ -1,27 +1,15 @@
-import type { HttpContext } from "./HttpContext.js";
-import {
-  getHandlerMetadata,
-  getResourceMetadata,
-} from "./metadata/ResourceMetadata.js";
-
-type ResourceConstructor = new () => object;
-
-interface Route {
-  readonly method: string;
-  readonly path: string;
-  readonly specificity: number;
-  readonly resource: object;
-  readonly handler: Function;
-}
-
-export type HttpRouterResult =
-  | { readonly matched: true; readonly value: unknown }
-  | { readonly matched: false; readonly status: 404 }
-  | {
-      readonly matched: false;
-      readonly status: 405;
-      readonly allowedMethods: readonly string[];
-    };
+import type { HttpContext } from "../HttpContext.js";
+import { getResourceMetadata } from "../metadata/ResourceMetadata.js";
+import { Route } from "./Route.js";
+import { HttpRouterResult } from "./HttpRouterResult.js";
+import { ResourceConstructor } from "../types/ResourceConstructor.js";
+import { getResourceHandlers } from "./getResourceHandlers.js";
+import { isResourceObject } from "./isResourceObject.js";
+import { matchPath } from "./matchPath.js";
+import { normalizePath } from "./normalizePath.js";
+import { joinPaths } from "./joinPaths.js";
+import { getPathSpecificity } from "./getPathSpecificity.js";
+import { HttpStatusCode } from "../HttpStatusCode.js";
 
 /** Discovers decorated resources and dispatches contexts to matching handlers. */
 export class HttpRouter {
@@ -33,7 +21,7 @@ export class HttpRouter {
 
   async dispatch(context: HttpContext): Promise<HttpRouterResult> {
     const path = normalizePath(context.req.url.pathname);
-    const method = context.req.req.method?.toUpperCase() ?? "GET";
+    const method = context.req.method;
     const matches = this._routes
       .map((candidate) => ({
         route: candidate,
@@ -56,8 +44,12 @@ export class HttpRouter {
       ];
 
       return allowedMethods.length > 0
-        ? { matched: false, status: 405, allowedMethods }
-        : { matched: false, status: 404 };
+        ? {
+            matched: false,
+            status: HttpStatusCode.MethodNotAllowed,
+            allowedMethods,
+          }
+        : { matched: false, status: HttpStatusCode.NotFound };
     }
 
     context.req.params = match.params;
@@ -129,79 +121,4 @@ export class HttpRouter {
 
     return routes;
   }
-}
-
-function getResourceHandlers(resource: object) {
-  const found = new Map<
-    Function,
-    NonNullable<ReturnType<typeof getHandlerMetadata>>
-  >();
-  let prototype = Object.getPrototypeOf(resource) as object | null;
-
-  while (prototype && prototype !== Object.prototype) {
-    for (const key of Reflect.ownKeys(prototype)) {
-      const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
-      if (typeof descriptor?.value !== "function") continue;
-
-      const metadata = getHandlerMetadata(descriptor.value);
-      if (metadata && !found.has(descriptor.value)) {
-        found.set(descriptor.value, metadata);
-      }
-    }
-    prototype = Object.getPrototypeOf(prototype) as object | null;
-  }
-
-  return found;
-}
-
-function isResourceObject(value: unknown): value is object {
-  return value !== null && typeof value === "object";
-}
-
-function joinPaths(...parts: (string | undefined)[]) {
-  return normalizePath(
-    parts.filter((part): part is string => !!part).join("/"),
-  );
-}
-
-function normalizePath(path: string) {
-  const normalized = path
-    .split("/")
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .join("/");
-  return normalized ? `/${normalized}` : "/";
-}
-
-function matchPath(routePath: string, requestPath: string) {
-  const routeSegments = routePath.split("/").filter(Boolean);
-  const requestSegments = requestPath.split("/").filter(Boolean);
-  if (routeSegments.length !== requestSegments.length) return undefined;
-
-  const params: Record<string, string> = {};
-  for (let index = 0; index < routeSegments.length; index++) {
-    const routeSegment = routeSegments[index]!;
-    const requestSegment = requestSegments[index]!;
-
-    if (routeSegment.startsWith(":")) {
-      const name = routeSegment.slice(1);
-      if (!name) return undefined;
-      try {
-        params[name] = decodeURIComponent(requestSegment);
-      } catch {
-        return undefined;
-      }
-    } else if (routeSegment !== requestSegment) {
-      return undefined;
-    }
-  }
-
-  return params;
-}
-
-function getPathSpecificity(path: string) {
-  return path
-    .split("/")
-    .filter(Boolean)
-    .reduce((score, segment) => score + (segment.startsWith(":") ? 0 : 1), 0);
 }
