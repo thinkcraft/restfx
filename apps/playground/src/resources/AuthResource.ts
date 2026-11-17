@@ -14,7 +14,11 @@ import { AuthService } from "../services/AuthService.js";
 const cookieName = "northstar_session";
 const cookieLifetimeSeconds = 60 * 60;
 
-@HttpResource("auth")
+@HttpResource({
+  path: "auth",
+  tag: "Auth",
+  description: "Demo cookie-based session endpoints",
+})
 export class AuthResource {
   @Inject(AuthService)
   private readonly auth!: AuthService;

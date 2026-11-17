@@ -37,6 +37,7 @@ export type {
   HttpMultipartValue,
 } from "./parsing/parseMultipartBody.js";
 export { HttpResource } from "./decorators/HttpResource.js";
+export type { HttpResourceOptions } from "./decorators/HttpResource.js";
 export { Inject } from "./decorators/Inject.js";
 export { HttpMiddleware } from "./decorators/HttpMiddleware.js";
 export { CorsMiddleware } from "./decorators/CorsMiddleware.js";

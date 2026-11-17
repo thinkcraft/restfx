@@ -12,7 +12,10 @@ import { TaskResponse } from "../models/TaskResponse.js";
 import { TaskService } from "../services/TaskService.js";
 import { TaskResource } from "./TaskResource.js";
 
-@HttpResource()
+@HttpResource({
+  tag: "Tasks",
+  description: "Tasks nested under workspace projects",
+})
 export class TasksResource {
   @Inject(TaskService)
   private readonly tasks!: TaskService;

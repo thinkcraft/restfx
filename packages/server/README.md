@@ -577,6 +577,21 @@ path variants receive `Without<Parameter>` and `With<Parameter>` suffixes. IDs
 must be unique. Repeated method names receive no default ID; set an explicit
 `operationId` when one is needed:
 
+OpenAPI model descriptions are set with `@Model({ description })`. Resource
+tag descriptions can be colocated with the resource class using
+`@HttpResource({ path, tag, description })`; the generated document includes
+these as OpenAPI tags. Existing `@HttpResource(path?)` calls remain supported,
+and the path can be omitted when a parent resource mounts the class:
+
+```ts
+@HttpResource({
+  path: "projects",
+  tag: "Projects",
+  description: "Project search and lifecycle operations",
+})
+class ProjectsResource {}
+```
+
 ```ts
 @HttpGet({ path: ":id",
   summary: "Get a user",

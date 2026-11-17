@@ -65,6 +65,8 @@ export type FieldOptions<T = unknown> = FieldOptionsBase<T> &
   );
 
 export interface ModelOptions<T = Readonly<Record<string, unknown>>> {
+  /** Description of the model in generated JSON Schema and OpenAPI schemas. */
+  readonly description?: string;
   /** Unknown properties are stripped by default; "reject" opts into rejection. */
   readonly unknownFields?: "reject" | "strip";
   /** Cross-field validation, run after all declared fields validate. */

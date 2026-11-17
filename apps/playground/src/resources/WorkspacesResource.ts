@@ -9,7 +9,11 @@ import { WorkspaceResponse } from "../models/WorkspaceResponse.js";
 import { WorkspaceService } from "../services/WorkspaceService.js";
 import { ProjectsResource } from "./ProjectsResource.js";
 
-@HttpResource("workspaces")
+@HttpResource({
+  path: "workspaces",
+  tag: "Workspaces",
+  description: "Workspace discovery and settings",
+})
 export class WorkspacesResource {
   @Inject(WorkspaceService)
   private readonly workspaces!: WorkspaceService;

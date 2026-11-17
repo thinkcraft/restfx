@@ -21,19 +21,6 @@ import {
       name: "northstar_session",
     },
   },
-  tags: [
-    { name: "Workspaces", description: "Workspace discovery and settings" },
-    {
-      name: "Projects",
-      description: "Project search and lifecycle operations",
-    },
-    { name: "Tasks", description: "Tasks nested under workspace projects" },
-    { name: "Auth", description: "Demo cookie-based session endpoints" },
-    {
-      name: "Attachments",
-      description: "Binary attachment upload and download",
-    },
-  ],
 })
 @HttpResource()
 export class PlaygroundApi {

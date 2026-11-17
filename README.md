@@ -102,7 +102,7 @@ OpenAPI enum schema:
 ```ts
 import { Enum, Field, Model } from "@framework/core";
 
-@Model()
+@Model({ description: "A project and its current lifecycle state." })
 class Project {
   @Field({ type: Enum(["active", "archived"]) })
   status!: "active" | "archived";
@@ -178,8 +178,9 @@ class WindowModel {
 
 Model-level `validate` runs after declared fields validate and returns one or
 more `{ path, message }` issues. Pass the model data type to `@Model<T>()` for
-typed cross-field checks. The optional `schema` model option adds extra JSON
-Schema/OpenAPI keywords such as `dependentRequired` or `if`/`then`.
+typed cross-field checks. The optional `description` is included in the model's
+OpenAPI schema, while `schema` adds extra JSON Schema/OpenAPI keywords such as
+`dependentRequired` or `if`/`then`.
 
 Models can be composed as nested fields with `@Field({ model: OtherModel })`;
 validation is recursive and OpenAPI uses a shared schema reference. They can

@@ -11,7 +11,11 @@ import { AttachmentService } from "../services/AttachmentService.js";
 
 const maxAttachmentBytes = 5 * 1024 * 1024;
 
-@HttpResource("attachments")
+@HttpResource({
+  path: "attachments",
+  tag: "Attachments",
+  description: "Binary attachment upload and download",
+})
 export class AttachmentsResource {
   @Inject(AttachmentService)
   private readonly attachments!: AttachmentService;

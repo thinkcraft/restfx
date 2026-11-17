@@ -13,7 +13,10 @@ import { ProjectResponse } from "../models/ProjectResponse.js";
 import { ProjectService } from "../services/ProjectService.js";
 import { ProjectResource } from "./ProjectResource.js";
 
-@HttpResource()
+@HttpResource({
+  tag: "Projects",
+  description: "Project search and lifecycle operations",
+})
 export class ProjectsResource {
   @Inject(ProjectService)
   private readonly projects!: ProjectService;

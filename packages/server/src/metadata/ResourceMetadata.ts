@@ -41,6 +41,8 @@ export type HttpRequestMiddlewareFactory = (
 
 export class ResourceMetadata {
   path?: string;
+  tag?: string;
+  description?: string;
   readonly children: NestedResourceMetadata[] = [];
 }
 

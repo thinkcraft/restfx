@@ -34,6 +34,27 @@ describe("playground end-to-end API", () => {
       assert.ok(openApi.components?.schemas?.WorkspaceResponse);
       assert.ok(openApi.components?.schemas?.TaskResponse);
       assert.ok(openApi.components?.schemas?.ListProjectsResponse);
+      assert.equal(
+        (
+          openApi.components?.schemas?.ProjectResponse as {
+            description: string;
+          }
+        ).description,
+        "A project and its current lifecycle state.",
+      );
+      assert.deepEqual(openApi.tags, [
+        { name: "Workspaces", description: "Workspace discovery and settings" },
+        {
+          name: "Projects",
+          description: "Project search and lifecycle operations",
+        },
+        { name: "Tasks", description: "Tasks nested under workspace projects" },
+        { name: "Auth", description: "Demo cookie-based session endpoints" },
+        {
+          name: "Attachments",
+          description: "Binary attachment upload and download",
+        },
+      ]);
       assert.ok(openApi.components?.schemas?.LoginRequest);
       assert.ok(openApi.components?.schemas?.AuthSessionResponse);
       assert.ok(openApi.paths["/auth/session"]?.post);

@@ -12,6 +12,7 @@ import {
 } from "@framework/core";
 import type { ModelConstructor, ModelFieldMetadata } from "@framework/core";
 import type { Route } from "../routing/Route.js";
+import { getResourceMetadata } from "../metadata/ResourceMetadata.js";
 import { getRequestModelMetadata } from "../request/RequestModelMetadata.js";
 import type {
   HttpResponseOptions,
@@ -148,7 +149,8 @@ export function createOpenApiDocument(
     paths,
   };
   if (options.servers) document.servers = options.servers;
-  if (options.tags) document.tags = options.tags;
+  const tags = createTags(routes, options.tags);
+  if (tags.length > 0) document.tags = tags;
   if (options.security) document.security = options.security;
 
   const securitySchemes = options.securitySchemes;
@@ -553,12 +555,41 @@ function createModelSchema(
 
   return {
     ...metadata.options.schema,
+    ...(metadata.options.description !== undefined
+      ? { description: metadata.options.description }
+      : {}),
     "x-framework-model": model.name,
     type: "object",
     ...(required.length > 0 ? { required } : {}),
     properties,
     additionalProperties: metadata.options.unknownFields !== "reject",
   };
+}
+
+function createTags(
+  routes: readonly Route[],
+  configuredTags: readonly Readonly<Record<string, unknown>>[] | undefined,
+) {
+  const tags = new Map<string, Readonly<Record<string, unknown>>>();
+  const unnamedTags: Readonly<Record<string, unknown>>[] = [];
+  for (const route of routes) {
+    const metadata = getResourceMetadata(route.resource.constructor);
+    if (metadata?.tag && metadata.description !== undefined) {
+      tags.set(metadata.tag, {
+        name: metadata.tag,
+        description: metadata.description,
+      });
+    }
+  }
+  for (const tag of configuredTags ?? []) {
+    const name = tag.name;
+    if (typeof name !== "string") {
+      unnamedTags.push(tag);
+      continue;
+    }
+    tags.set(name, { ...tags.get(name), ...tag });
+  }
+  return [...tags.values(), ...unnamedTags];
 }
 
 function createFieldSchema(

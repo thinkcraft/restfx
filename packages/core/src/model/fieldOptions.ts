@@ -7,6 +7,12 @@ import type {
 
 export function validateModelOptions(options: ModelOptions<any>) {
   if (
+    options.description !== undefined &&
+    typeof options.description !== "string"
+  ) {
+    throw new TypeError("description must be a string");
+  }
+  if (
     options.validate !== undefined &&
     typeof options.validate !== "function"
   ) {

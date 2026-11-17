@@ -2,6 +2,14 @@ import { getOrCreateResourceMetadata } from "../metadata/ResourceMetadata.js";
 
 type ResourceConstructor = abstract new (...args: any[]) => object;
 
+export interface HttpResourceOptions {
+  readonly path?: string;
+  /** OpenAPI tag used by this resource's operations. */
+  readonly tag?: string;
+  /** Description for the resource's OpenAPI tag; requires `tag`. */
+  readonly description?: string;
+}
+
 type ResourceDecorator = {
   <T extends ResourceConstructor>(
     value: T,
@@ -11,18 +19,37 @@ type ResourceDecorator = {
 };
 
 /** Marks a class as a resource, or mounts a resource-valued field. */
-export function HttpResource(path?: string): ResourceDecorator {
+export function HttpResource(
+  pathOrOptions?: string | HttpResourceOptions,
+): ResourceDecorator {
+  const options =
+    typeof pathOrOptions === "string"
+      ? { path: pathOrOptions }
+      : (pathOrOptions ?? {});
+  if (options.description !== undefined && typeof options.tag !== "string") {
+    throw new TypeError("@HttpResource description requires an OpenAPI tag");
+  }
+  const path = options.path;
+
   return ((
     value: Function | undefined,
     context: ClassDecoratorContext | ClassFieldDecoratorContext,
   ) => {
     if (context.kind === "class") {
-      getOrCreateResourceMetadata(value!).path = path;
+      const metadata = getOrCreateResourceMetadata(value!);
+      metadata.path = path;
+      metadata.tag = options.tag;
+      metadata.description = options.description;
       return;
     }
 
     if (context.kind !== "field") {
       throw new TypeError("@HttpResource can only decorate classes and fields");
+    }
+    if (options.tag !== undefined || options.description !== undefined) {
+      throw new TypeError(
+        "OpenAPI tag metadata can only be applied to resource classes",
+      );
     }
 
     if (typeof context.name === "string" && context.name.startsWith("#")) {

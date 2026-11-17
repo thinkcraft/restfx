@@ -105,6 +105,7 @@ type EventData = {
 };
 
 @Model<EventData>({
+  description: "A dated event with an owner and an ordered numeric range.",
   schema: { dependentRequired: { start: ["end"] } },
   validate: (event) =>
     event.start <= event.end
@@ -143,7 +144,11 @@ let sameModelInstance = false;
   path: "/openapi.json",
   info: { title: "Request models", version: "1.0.0" },
 })
-@HttpResource("users")
+@HttpResource({
+  path: "users",
+  tag: "Users",
+  description: "User and event operations.",
+})
 class UsersResource {
   @HttpGet({ summary: "List users" })
   list() {
@@ -182,6 +187,13 @@ describe("HTTP request models", () => {
       const documentResponse = await fetch(`${baseUrl}/openapi.json`);
       const document = (await documentResponse.json()) as any;
       const eventSchema = document.components.schemas.EventModel;
+      assert.equal(
+        eventSchema.description,
+        "A dated event with an owner and an ordered numeric range.",
+      );
+      assert.deepEqual(document.tags, [
+        { name: "Users", description: "User and event operations." },
+      ]);
       assert.equal(eventSchema.properties.date.format, "date");
       assert.equal(eventSchema.properties.time.format, "time");
       assert.equal(eventSchema.properties.timestamp.format, "date-time");

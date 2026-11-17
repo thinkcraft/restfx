@@ -7,7 +7,7 @@ import {
   UUID,
 } from "@framework/core";
 
-@Model()
+@Model({ description: "A project and its current lifecycle state." })
 export class ProjectResponse {
   @Field({ type: UUID, description: "Stable project identifier" })
   id!: string;
