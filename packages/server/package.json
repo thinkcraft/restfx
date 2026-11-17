@@ -1,6 +1,6 @@
 {
   "name": "@restfx/server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Node.js HTTP server with decorated resources, routing, middleware, and OpenAPI for RestFX.",
   "license": "Apache-2.0",
   "repository": {
