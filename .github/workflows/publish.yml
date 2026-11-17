@@ -1,4 +1,4 @@
-name: Publish npm packages
+name: Stage npm packages
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: npm-publish
+  group: npm-stage
   cancel-in-progress: false
 
 jobs:
@@ -63,7 +63,7 @@ jobs:
         run: pnpm test
 
   publish:
-    name: Publish packages
+    name: Stage packages
     needs: verify
     runs-on: ubuntu-latest
     permissions:
@@ -82,17 +82,23 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - name: Set up npm CLI for staged publishing
+        run: npm install --global 'npm@^11.15.0'
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build packages
         run: pnpm build
 
-      - name: Publish @restfx/core
-        run: pnpm --filter @restfx/core publish --access public --no-git-checks --provenance
+      - name: Stage @restfx/core
+        run: npm stage publish --access public --provenance
+        working-directory: packages/core
 
-      - name: Publish @restfx/server
-        run: pnpm --filter @restfx/server publish --access public --no-git-checks --provenance
+      - name: Stage @restfx/server
+        run: npm stage publish --access public --provenance
+        working-directory: packages/server
 
-      - name: Publish @restfx/client
-        run: pnpm --filter @restfx/client publish --access public --no-git-checks --provenance
+      - name: Stage @restfx/client
+        run: npm stage publish --access public --provenance
+        working-directory: packages/client
