@@ -6,7 +6,12 @@ export type RequestHandler = (
 ) => void;
 
 export { HttpServer } from "./HttpServer.js";
-export type { HttpServerOptions } from "./HttpServer.js";
+export type {
+  HttpErrorHandler,
+  HttpResponseMetrics,
+  HttpServerCloseOptions,
+  HttpServerOptions,
+} from "./HttpServer.js";
 export { HttpRouter } from "./routing/HttpRouter.js";
 export { HttpContext } from "./HttpContext.js";
 export { HttpError } from "./HttpError.js";

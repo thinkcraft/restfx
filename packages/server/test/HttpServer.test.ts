@@ -1307,6 +1307,11 @@ const slowRequestStarted = new Promise<void>((resolve) => {
 });
 
 class LifecycleResource {
+  @HttpGet({ path: "fail" })
+  fail() {
+    throw new Error("expected failure");
+  }
+
   @HttpGet({ path: "slow" })
   async slow() {
     notifySlowRequestStarted();
@@ -1319,6 +1324,16 @@ class LifecycleResource {
   @HttpMethod("GET", { path: "ready" })
   ready() {
     return { ready: true };
+  }
+}
+
+let notifyShutdownRequestStarted!: () => void;
+
+class ShutdownTimeoutResource {
+  @HttpGet()
+  async hang() {
+    notifyShutdownRequestStarted();
+    await new Promise<void>(() => {});
   }
 }
 
@@ -1374,6 +1389,73 @@ describe("HttpServer lifecycle", () => {
     );
     assert.equal(readyResponse.status, 200);
     await server.close();
+  });
+
+  it("accepts Node server options and closes cleanly with a timeout configured", async () => {
+    const server = new HttpServer(LifecycleApi, {
+      serverOptions: { headersTimeout: 2_000 },
+    });
+    const listeningServer = server.listen(0);
+    assert.equal(listeningServer.headersTimeout, 2_000);
+    await once(listeningServer, "listening");
+
+    await server.close({ timeoutMs: 1_000 });
+    assert.equal(listeningServer.listening, false);
+  });
+
+  it("force-closes remaining connections when the shutdown timeout expires", async () => {
+    const started = new Promise<void>((resolve) => {
+      notifyShutdownRequestStarted = resolve;
+    });
+    const server = new HttpServer(ShutdownTimeoutResource);
+    const listeningServer = server.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+    const pendingResponse = fetch(`http://127.0.0.1:${address.port}/`);
+    await started;
+
+    await server.close({ timeoutMs: 10 });
+    await assert.rejects(pendingResponse);
+  });
+
+  it("rejects invalid graceful-shutdown timeouts", () => {
+    const server = new HttpServer(LifecycleApi);
+    assert.throws(() => server.close({ timeoutMs: -1 }), {
+      name: "RangeError",
+      message: "timeoutMs must be a non-negative finite number",
+    });
+  });
+});
+
+describe("HttpServer hooks", () => {
+  it("allows custom error responses and reports request lifecycle metrics", async () => {
+    const observedErrors: unknown[] = [];
+    const observedResponses: Array<{ statusCode: number; completed: boolean }> =
+      [];
+    const server = new HttpServer(LifecycleApi, {
+      onError: (error) => observedErrors.push(error),
+      onResponse: (_context, metrics) => observedResponses.push(metrics),
+      errorHandler: () =>
+        new HttpResult(503, { message: "Service unavailable" }),
+    });
+    const listeningServer = server.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/fail`);
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), {
+        message: "Service unavailable",
+      });
+    } finally {
+      await server.close();
+    }
+
+    assert.equal(observedErrors.length, 1);
+    assert.equal((observedErrors[0] as Error).message, "expected failure");
+    assert.ok(observedResponses.some((metrics) => metrics.statusCode === 503));
+    assert.ok(observedResponses.every((metrics) => metrics.completed));
   });
 });
 

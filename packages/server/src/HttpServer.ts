@@ -3,6 +3,7 @@ import {
   IncomingMessage,
   Server,
   ServerResponse,
+  type ServerOptions,
 } from "node:http";
 import { HttpRequest } from "./HttpRequest.js";
 import { HttpContext } from "./HttpContext.js";
@@ -17,36 +18,96 @@ import { HttpRouter } from "./routing/HttpRouter.js";
 const streamClosed: unique symbol = Symbol("stream closed");
 
 export interface HttpServerOptions {
+  /** Options passed to Node's `http.createServer()`. */
+  readonly serverOptions?: ServerOptions;
   /**
    * Return true only when the connecting peer is a trusted reverse proxy.
    * Forwarded headers are ignored by default.
    */
   readonly trustProxy?: (remoteAddress: string | undefined) => boolean;
+  /** Replace the default error response. This is not called for errors after headers are sent. */
+  readonly errorHandler?: HttpErrorHandler;
+  /** Observe errors, including errors that cannot be converted to a response. Observer failures are ignored. */
+  readonly onError?: (error: unknown, context?: HttpContext) => void;
+  /** Called after a request context is created. Observer failures are ignored. */
+  readonly onRequest?: (context: HttpContext) => void;
+  /** Called after response handling finishes. Observer failures are ignored. */
+  readonly onResponse?: (
+    context: HttpContext,
+    metrics: HttpResponseMetrics,
+  ) => void;
+}
+
+export type HttpErrorHandler = (
+  error: unknown,
+  context?: HttpContext,
+) => HttpResult | Promise<HttpResult>;
+
+export interface HttpResponseMetrics {
+  readonly statusCode: number;
+  readonly durationMs: number;
+  /** True when the response was ended by the server. */
+  readonly completed: boolean;
+}
+
+export interface HttpServerCloseOptions {
+  /** Force-close remaining connections after this many milliseconds. */
+  readonly timeoutMs?: number;
 }
 
 export class HttpServer {
   private readonly _server: Server;
   private readonly _router: HttpRouter;
   private readonly _trustProxy?: HttpServerOptions["trustProxy"];
+  private readonly _errorHandler?: HttpServerOptions["errorHandler"];
+  private readonly _onError?: HttpServerOptions["onError"];
+  private readonly _onRequest?: HttpServerOptions["onRequest"];
+  private readonly _onResponse?: HttpServerOptions["onResponse"];
   private _closePromise?: Promise<void>;
 
   constructor(rootResource: new () => object, options: HttpServerOptions = {}) {
     this._router = new HttpRouter(rootResource);
     this._trustProxy = options.trustProxy;
-    this._server = createServer(this.handleRequest.bind(this));
+    this._errorHandler = options.errorHandler;
+    this._onError = options.onError;
+    this._onRequest = options.onRequest;
+    this._onResponse = options.onResponse;
+    this._server = createServer(
+      options.serverOptions ?? {},
+      this.handleRequest.bind(this),
+    );
   }
 
-  close() {
+  close(options: HttpServerCloseOptions = {}) {
     if (this._closePromise) return this._closePromise;
+    if (
+      options.timeoutMs !== undefined &&
+      (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 0)
+    ) {
+      throw new RangeError("timeoutMs must be a non-negative finite number");
+    }
     if (!this._server.listening) return Promise.resolve();
 
     this._closePromise = new Promise<void>((resolve, reject) => {
+      let timer: NodeJS.Timeout | undefined;
+      const clearTimer = () => {
+        if (timer) clearTimeout(timer);
+      };
+      if (options.timeoutMs !== undefined) {
+        timer = setTimeout(
+          () => this._server.closeAllConnections(),
+          options.timeoutMs,
+        );
+        timer.unref();
+      }
       try {
         this._server.close((error) => {
+          clearTimer();
           if (error) reject(error);
           else resolve();
         });
       } catch (error) {
+        clearTimer();
         reject(error);
       }
     });
@@ -59,14 +120,17 @@ export class HttpServer {
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse) {
+    const startedAt = performance.now();
+    let context: HttpContext | undefined;
     try {
-      const context = new HttpContext(
+      context = new HttpContext(
         new HttpRequest(
           req,
           this._trustProxy?.(req.socket.remoteAddress) ?? false,
         ),
         new HttpResponse(res),
       );
+      this.notify(this._onRequest, context);
       const result = await this._router.dispatch(context);
       if (!result.matched) {
         if (result.status === HttpStatusCode.MethodNotAllowed) {
@@ -91,34 +155,67 @@ export class HttpServer {
 
       await this.sendResult(res, result.value, req.method === "HEAD");
     } catch (error) {
+      this.notifyError(error, context);
       if (req.aborted || res.destroyed || res.writableEnded) return;
       if (res.headersSent) {
         res.destroy(error instanceof Error ? error : undefined);
         return;
       }
 
-      if (error instanceof HttpError) {
-        this.closeIncompleteRequest(req, res);
-        await this.sendResult(
-          res,
-          new HttpResult(error.status, {
-            message: error.message,
-            ...(error.details === undefined ? {} : { details: error.details }),
-          }),
-          req.method === "HEAD",
-        );
-        return;
+      this.closeIncompleteRequest(req, res);
+      let result: HttpResult;
+      if (this._errorHandler) {
+        try {
+          result = await this._errorHandler(error, context);
+        } catch (handlerError) {
+          this.notifyError(handlerError, context);
+          result = this.createInternalServerError();
+        }
+      } else {
+        result = this.createDefaultErrorResult(error);
       }
 
-      this.closeIncompleteRequest(req, res);
-      await this.sendResult(
-        res,
-        new HttpResult(HttpStatusCode.InternalServerError, {
-          message: "Internal Server Error",
-        }),
-        req.method === "HEAD",
-      );
+      await this.sendResult(res, result, req.method === "HEAD");
+    } finally {
+      if (context) {
+        this.notify(this._onResponse, context, {
+          statusCode: res.statusCode,
+          durationMs: performance.now() - startedAt,
+          completed: res.writableEnded,
+        });
+      }
     }
+  }
+
+  private createDefaultErrorResult(error: unknown) {
+    if (error instanceof HttpError) {
+      return new HttpResult(error.status, {
+        message: error.message,
+        ...(error.details === undefined ? {} : { details: error.details }),
+      });
+    }
+    return this.createInternalServerError();
+  }
+
+  private createInternalServerError() {
+    return new HttpResult(HttpStatusCode.InternalServerError, {
+      message: "Internal Server Error",
+    });
+  }
+
+  private notify<T extends unknown[]>(
+    callback: ((...args: T) => void) | undefined,
+    ...args: T
+  ) {
+    try {
+      callback?.(...args);
+    } catch {
+      // Observability callbacks must not change HTTP behavior.
+    }
+  }
+
+  private notifyError(error: unknown, context?: HttpContext) {
+    this.notify(this._onError, error, context);
   }
 
   private closeIncompleteRequest(req: IncomingMessage, res: ServerResponse) {

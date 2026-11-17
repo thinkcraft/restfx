@@ -5,6 +5,39 @@ decorators, middleware, parameterized routing, and bounded request-body parsing.
 It uses Node's `node:http` server; `HttpServer.listen()` returns the underlying
 Node `Server` instance.
 
+Pass `serverOptions` to configure Node's `http.createServer()` (for example,
+`headersTimeout` or `requestTimeout`). `close({ timeoutMs })` stops accepting
+new connections and waits for active requests; if the timeout expires, remaining
+connections are force-closed. The timeout is optional, so the default behavior
+continues to wait for requests to finish.
+
+Optional `onRequest`, `onResponse`, and `onError` hooks support application
+instrumentation. Response metrics include the status code, elapsed time, and
+whether the server ended the response. Hook exceptions are ignored so logging
+or metrics failures do not alter HTTP behavior. Use `errorHandler` to replace
+the default error response while keeping `onError` for reporting:
+
+```ts
+const server = new HttpServer(ApiResource, {
+  onError(error, context) {
+    logger.error({ error, path: context?.req.path });
+  },
+  onResponse(context, responseMetrics) {
+    logger.info({ path: context.req.path, ...responseMetrics });
+  },
+  errorHandler(error) {
+    if (error instanceof HttpError && error.status === 404) {
+      return new HttpResult(404, { message: "Not found" });
+    }
+    return new HttpResult(500, { message: "Request failed" });
+  },
+});
+```
+
+Without an `errorHandler`, `HttpError` responses retain their status and details,
+and unexpected errors return a generic `500` response. `errorHandler` is not
+called after response headers have been sent.
+
 ## Quick start
 
 ```ts
