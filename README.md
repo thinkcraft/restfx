@@ -1,8 +1,9 @@
 # RestFX
 
-RestFX is a TypeScript-first full-stack framework monorepo managed with pnpm. The
-workspace currently provides shared configuration helpers, a browser fetch
-client, and a Node.js HTTP server with decorator-based resources and routing.
+RestFX is a TypeScript-first framework for building HTTP APIs with shared,
+runtime-validated models, a Node.js server, and typed browser clients. The pnpm
+workspace keeps the shared model layer browser-safe and separates server and
+client runtime concerns into their own packages.
 
 ## Requirements
 
@@ -18,6 +19,42 @@ client, and a Node.js HTTP server with decorator-based resources and routing.
   resources, middleware, routing, and request-body parsing. See the
   [server README](packages/server/README.md) for usage and behavior.
 - `apps/playground` — runnable example application.
+
+## Framework features
+
+- **Shared TypeScript models** — Stage 3 `@Model` and `@Field` decorators,
+  built-in string, number, integer, boolean, email, UUID, date/time, enum,
+  array, union, and discriminated-union field types; optional, nullable, default,
+  and constraint metadata; nested models, inheritance, unknown-field policies,
+  and cross-field validation.
+- **Runtime validation and schema alignment** — validate input into model
+  instances without invoking constructors, report field-path issues, and use
+  the same model metadata to generate OpenAPI schemas and typed client models.
+- **Decorator-based HTTP resources and routing** — compose nested resources,
+  register handlers for standard HTTP methods, and route static, named,
+  optional, and trailing-wildcard path segments. Includes `HEAD` fallback,
+  automatic `OPTIONS`, and `405` responses with `Allow` headers.
+- **Request and response handling** — bounded parsing for JSON, URL-encoded,
+  multipart, and binary bodies; validated request and response models; combined
+  models sourced from path, query, header, and body; configurable status,
+  headers, and body results; and backpressure-aware streaming uploads and
+  responses.
+- **Middleware and services** — resource-scoped middleware with short-circuiting,
+  configurable CORS, and dependency injection with singleton and request
+  lifetimes.
+- **HTTP utilities and lifecycle controls** — cookie read/write helpers,
+  request-scoped state and cancellation, request-ID correlation, lifecycle and
+  error hooks, configurable Node HTTP server options, graceful shutdown, and
+  opt-in trusted-proxy handling.
+- **OpenAPI documentation** — generate an OpenAPI document from routes, request
+  and response models, and field metadata; configure operation details and
+  security schemes; optionally serve Scalar, Swagger UI, or Redoc CE.
+- **Fetch client and client generation** — use a lightweight configurable
+  Fetch wrapper or generate typed operation methods from OpenAPI. Generated
+  methods support model validation, path/query/header parameters, JSON,
+  multipart, URL-encoded, text, and binary bodies, plus structured HTTP errors.
+
+See the package guides below for the exact APIs, supported behavior, and examples.
 
 ## Guides
 
