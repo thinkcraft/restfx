@@ -60,6 +60,22 @@ class DefaultDocsResource {}
 @HttpResource()
 class ScalarUiResource {}
 
+@OpenApiMiddleware({
+  path: "/swagger/openapi.json",
+  ui: { type: "swagger", path: "/swagger" },
+  info: { title: "Swagger UI API", version: "1" },
+})
+@HttpResource()
+class SwaggerUiResource {}
+
+@OpenApiMiddleware({
+  path: "/redoc/openapi.json",
+  ui: { type: "redoc", path: "/redoc" },
+  info: { title: "Redoc CE API", version: "1" },
+})
+@HttpResource()
+class RedocUiResource {}
+
 async function withServer(
   resource: new () => object,
   run: (baseUrl: string) => Promise<void>,
@@ -183,6 +199,59 @@ describe("OpenApiMiddleware", () => {
         ((await documentResponse.json()) as { info: { title: string } }).info
           .title,
         "Scalar UI API",
+      );
+    });
+  });
+
+  it("serves Swagger UI from unpkg at its configured path", async () => {
+    await withServer(SwaggerUiResource, async (baseUrl) => {
+      const uiResponse = await fetch(`${baseUrl}/swagger`);
+
+      assert.equal(uiResponse.status, 200);
+      assert.match(
+        uiResponse.headers.get("content-type") ?? "",
+        /^text\/html; charset=utf-8$/,
+      );
+      const html = await uiResponse.text();
+      assert.match(
+        html,
+        /https:\/\/unpkg\.com\/swagger-ui-dist@5\.11\.0\/swagger-ui\.css/,
+      );
+      assert.match(
+        html,
+        /https:\/\/unpkg\.com\/swagger-ui-dist@5\.11\.0\/swagger-ui-bundle\.js/,
+      );
+      assert.match(
+        html,
+        /SwaggerUIBundle\({"url":"\/swagger\/openapi\.json","dom_id":"#swagger-ui"}\)/,
+      );
+    });
+  });
+
+  it("serves Redoc CE at its configured path linked to the OpenAPI document", async () => {
+    await withServer(RedocUiResource, async (baseUrl) => {
+      const uiResponse = await fetch(`${baseUrl}/redoc`);
+
+      assert.equal(uiResponse.status, 200);
+      assert.match(
+        uiResponse.headers.get("content-type") ?? "",
+        /^text\/html; charset=utf-8$/,
+      );
+      const html = await uiResponse.text();
+      assert.match(html, /<title>Redoc CE<\/title>/);
+      assert.match(html, /<redoc spec-url="\/redoc\/openapi\.json"><\/redoc>/);
+      assert.match(
+        html,
+        /<script type="module" src="https:\/\/cdn\.redoc\.ly\/redoc\/v3\.x\/bundles\/redoc\.standalone\.js"><\/script>/,
+      );
+      assert.match(html, /body\s*\{\s*margin: 0;\s*padding: 0;/);
+
+      const documentResponse = await fetch(`${baseUrl}/redoc/openapi.json`);
+      assert.equal(documentResponse.status, 200);
+      assert.equal(
+        ((await documentResponse.json()) as { info: { title: string } }).info
+          .title,
+        "Redoc CE API",
       );
     });
   });

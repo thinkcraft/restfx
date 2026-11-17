@@ -329,21 +329,24 @@ class ApiResource {}
 const server = new HttpServer(ApiResource);
 ```
 
-To serve an interactive Scalar API reference as well, enable the UI option. It
-defaults to `/docs`, and loads the document from the configured OpenAPI endpoint:
+To serve an interactive Scalar, Swagger UI, or Redoc CE reference as well, enable the UI
+option. It defaults to `/docs`, and loads the document from the configured
+OpenAPI endpoint. Select the UI with `type`:
 
 ```ts
 @OpenApiMiddleware({
   path: "/docs/openapi.json",
-  ui: { type: "scalar", path: "/docs" },
+  ui: { type: "swagger", path: "/docs" },
   info: { title: "Example API", version: "1.0.0" },
 })
 @HttpResource()
 class ApiResource {}
 ```
 
-The UI page uses Scalar's CDN bundle; the JSON document endpoint remains
-available independently. Omit `ui` to serve only the document.
+The UI page uses the selected UI's CDN bundle (Scalar from jsDelivr, Swagger UI
+from unpkg, or Redoc CE from cdn.redoc.ly); the JSON document endpoint remains
+available independently. Set `type` to `"scalar"`, `"swagger"`, or `"redoc"`
+to choose a UI. Omit `ui` to serve only the document.
 
 Routes contribute their HTTP methods and paths, inferred required path
 parameters, request and response model schemas, and standard request-validation

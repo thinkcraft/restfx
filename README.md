@@ -29,7 +29,7 @@ pnpm dev
 The playground listens on <http://localhost:3000>. Set `PORT` to change the
 port.
 
-Open the interactive Scalar reference at <http://localhost:3000/docs>; the raw
+Open the interactive Swagger UI reference at <http://localhost:3000/docs>; the raw
 OpenAPI document is at <http://localhost:3000/openapi.json>. The sample API
 models a workspace with nested projects and tasks, including validated request
 bodies, query filters, and CRUD-style operations. Its seeded workspace ID is

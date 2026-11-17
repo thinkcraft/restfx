@@ -1090,6 +1090,26 @@ describe("HttpServer resource decorators", () => {
   });
 });
 
+describe("HttpServer.listen", () => {
+  it("calls the callback once the server is listening", async () => {
+    const server = new HttpServer(TestApi);
+    let callbackCalled = false;
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.listen(0, () => {
+          callbackCalled = true;
+          resolve();
+        });
+      });
+
+      assert.equal(callbackCalled, true);
+    } finally {
+      await server.close();
+    }
+  });
+});
+
 describe("HttpServer streaming behavior", () => {
   const server = new HttpServer(StreamingBehaviorResource);
   let baseUrl: string;

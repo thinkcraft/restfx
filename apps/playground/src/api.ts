@@ -3,7 +3,7 @@ import { WorkspacesResource } from "./resources.js";
 
 @OpenApiMiddleware({
   path: "/openapi.json",
-  ui: { type: "scalar", path: "/docs" },
+  ui: { type: "swagger", path: "/docs" },
   info: {
     title: "Northstar Project Platform API",
     version: "1.0.0",

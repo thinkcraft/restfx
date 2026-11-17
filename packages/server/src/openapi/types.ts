@@ -61,7 +61,7 @@ export interface OpenApiOptions {
 
 export interface OpenApiUiOptions {
   /** UI implementation to serve. */
-  readonly type: "scalar";
+  readonly type: "scalar" | "swagger" | "redoc";
   /** UI page path; defaults to `/docs`. */
   readonly path?: string;
 }

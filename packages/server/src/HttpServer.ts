@@ -53,9 +53,9 @@ export class HttpServer {
     return this._closePromise;
   }
 
-  listen(port = 3000) {
+  listen(port = 3000, callback?: () => void) {
     this._closePromise = undefined;
-    return this._server.listen(port);
+    return this._server.listen(port, callback);
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse) {

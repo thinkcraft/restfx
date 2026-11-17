@@ -44,7 +44,13 @@ export function createOpenApiRequestMiddleware(
       case "GET":
       case "HEAD":
         if (isUiRequest) {
-          return new HttpResult(200, createScalarUi(path), {
+          const html =
+            options.ui?.type === "swagger"
+              ? createSwaggerUi(path)
+              : options.ui?.type === "redoc"
+                ? createRedocUi(path)
+                : createScalarUi(path);
+          return new HttpResult(200, html, {
             [HttpHeaderName.ContentType]: `${HttpMediaType.TextHtml}; charset=utf-8`,
           });
         }
@@ -75,10 +81,7 @@ function normalizeOpenApiPath(configuredPath: string, label: string) {
 }
 
 function createScalarUi(documentPath: string) {
-  const scalarOptions = JSON.stringify({ url: documentPath })
-    .replaceAll("<", "\\u003c")
-    .replaceAll("\u2028", "\\u2028")
-    .replaceAll("\u2029", "\\u2029");
+  const scalarOptions = serializeInlineJson({ url: documentPath });
 
   return `<!doctype html>
 <html>
@@ -93,4 +96,69 @@ function createScalarUi(documentPath: string) {
     <script>Scalar.createApiReference('#app', ${scalarOptions});</script>
   </body>
 </html>`;
+}
+
+function createSwaggerUi(documentPath: string) {
+  const swaggerOptions = serializeInlineJson({
+    url: documentPath,
+    dom_id: "#swagger-ui",
+  });
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <title>Swagger UI</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Swagger UI" />
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js" crossorigin></script>
+    <script>
+      window.onload = () => {
+        window.ui = SwaggerUIBundle(${swaggerOptions});
+      };
+    </script>
+  </body>
+</html>`;
+}
+
+function createRedocUi(documentPath: string) {
+  const specUrl = escapeHtmlAttribute(documentPath);
+
+  return `<!doctype html>
+<html>
+  <head>
+    <title>Redoc CE</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <redoc spec-url="${specUrl}"></redoc>
+    <script type="module" src="https://cdn.redoc.ly/redoc/v3.x/bundles/redoc.standalone.js"></script>
+  </body>
+</html>`;
+}
+
+function escapeHtmlAttribute(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function serializeInlineJson(value: unknown) {
+  return JSON.stringify(value)
+    .replaceAll("<", "\\u003c")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
 }
