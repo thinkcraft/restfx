@@ -50,6 +50,38 @@ The example provides `GET /api/posts`, `GET /api/posts/:id`, and
 for other values. Return `HttpResult` to set a status, body, and headers
 explicitly. `HttpResponse.setHeader(name, value)` sets a response header.
 
+### Streaming responses
+
+Return an async generator directly, or use one as an `HttpResult` body. Each
+yielded chunk must be a string or `Uint8Array` (including `Buffer`). Chunks are
+written as they are produced with backpressure; they are not collected into a
+single body. Set a response `content-type` header explicitly when appropriate;
+otherwise streams default to `application/octet-stream`.
+
+```ts
+@HttpGet("events")
+async *events() {
+  yield "event: ready\ndata: connected\n\n";
+  yield "event: update\ndata: data available\n\n";
+}
+
+@HttpGet("download")
+download() {
+  async function* chunks() {
+    yield Buffer.from("file contents");
+  }
+
+  return new HttpResult(200, chunks(), {
+    "content-type": "application/octet-stream",
+  });
+}
+```
+
+For `HEAD` requests and bodyless statuses (`204` and `304`), the generator is
+not consumed. If a generator fails after response data has started, the server
+closes the connection because it can no longer replace the partial response
+with an error response.
+
 ## Resources and handlers
 
 - `@HttpResource(path?)` marks a resource class and optionally gives it a path

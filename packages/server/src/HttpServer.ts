@@ -69,7 +69,7 @@ export class HttpServer {
       if (!result.matched) {
         if (result.status === HttpStatusCode.MethodNotAllowed) {
           res.setHeader(HttpHeaderName.Allow, result.allowedMethods.join(", "));
-          this.sendResult(
+          await this.sendResult(
             res,
             new HttpResult(
               HttpStatusCode.MethodNotAllowed,
@@ -78,7 +78,7 @@ export class HttpServer {
             req.method === "HEAD",
           );
         } else {
-          this.sendResult(
+          await this.sendResult(
             res,
             new HttpResult(HttpStatusCode.NotFound, "Not Found"),
             req.method === "HEAD",
@@ -87,13 +87,17 @@ export class HttpServer {
         return;
       }
 
-      this.sendResult(res, result.value, req.method === "HEAD");
+      await this.sendResult(res, result.value, req.method === "HEAD");
     } catch (error) {
       if (res.writableEnded) return;
+      if (res.headersSent) {
+        res.destroy(error instanceof Error ? error : undefined);
+        return;
+      }
 
       if (error instanceof HttpError) {
         this.closeIncompleteRequest(req, res);
-        this.sendResult(
+        await this.sendResult(
           res,
           new HttpResult(error.status, {
             message: error.message,
@@ -105,7 +109,7 @@ export class HttpServer {
       }
 
       this.closeIncompleteRequest(req, res);
-      this.sendResult(
+      await this.sendResult(
         res,
         new HttpResult(HttpStatusCode.InternalServerError, {
           message: "Internal Server Error",
@@ -122,7 +126,11 @@ export class HttpServer {
     res.setHeader("connection", "close");
   }
 
-  private sendResult(res: ServerResponse, value: unknown, headRequest = false) {
+  private async sendResult(
+    res: ServerResponse,
+    value: unknown,
+    headRequest = false,
+  ) {
     if (res.writableEnded) return;
 
     const result =
@@ -163,6 +171,12 @@ export class HttpServer {
       } else {
         res.end(output);
       }
+    } else if (isAsyncIterable(body)) {
+      if (headRequest) {
+        res.end();
+      } else {
+        await this.sendStream(res, body);
+      }
     } else {
       const output = JSON.stringify(body);
       if (!res.hasHeader(HttpHeaderName.ContentType)) {
@@ -184,4 +198,89 @@ export class HttpServer {
       }
     }
   }
+
+  private async sendStream(res: ServerResponse, body: AsyncIterable<unknown>) {
+    const iterator = body[Symbol.asyncIterator]();
+    let closeHandler!: () => void;
+    const closed = new Promise<void>((resolve) => {
+      closeHandler = resolve;
+      res.once("close", closeHandler);
+    });
+    let completed = false;
+
+    try {
+      while (!res.destroyed) {
+        const next = await Promise.race([
+          iterator.next().then((result) => ({ type: "next" as const, result })),
+          closed.then(() => ({ type: "closed" as const })),
+        ]);
+        if (next.type === "closed") return;
+        if (next.result.done) {
+          completed = true;
+          break;
+        }
+
+        const chunk = next.result.value;
+        if (typeof chunk !== "string" && !(chunk instanceof Uint8Array)) {
+          throw new TypeError(
+            "Streaming response chunks must be strings or Uint8Array values",
+          );
+        }
+        if (!res.hasHeader(HttpHeaderName.ContentType)) {
+          res.setHeader(HttpHeaderName.ContentType, "application/octet-stream");
+        }
+
+        if (!res.write(chunk) && !(await waitForDrain(res))) return;
+      }
+
+      if (!res.destroyed && !res.writableEnded) {
+        if (!res.hasHeader(HttpHeaderName.ContentType)) {
+          res.setHeader(HttpHeaderName.ContentType, "application/octet-stream");
+        }
+        res.end();
+      }
+    } finally {
+      res.off("close", closeHandler);
+      if (!completed) {
+        void Promise.resolve(iterator.return?.()).catch(() => {});
+      }
+    }
+  }
+}
+
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return (
+    value !== null &&
+    value !== undefined &&
+    typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] ===
+      "function"
+  );
+}
+
+function waitForDrain(res: ServerResponse) {
+  if (res.destroyed || !res.writable) return Promise.resolve(false);
+
+  return new Promise<boolean>((resolve, reject) => {
+    const cleanup = () => {
+      res.off("drain", onDrain);
+      res.off("close", onClose);
+      res.off("error", onError);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolve(true);
+    };
+    const onClose = () => {
+      cleanup();
+      resolve(false);
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+
+    res.once("drain", onDrain);
+    res.once("close", onClose);
+    res.once("error", onError);
+  });
 }

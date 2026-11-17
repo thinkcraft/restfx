@@ -56,6 +56,25 @@ class PostsResource {
     return { path: ctx.req.params.path };
   }
 
+  @HttpGet("stream")
+  async *stream() {
+    yield "first ";
+    yield Buffer.from("chunk");
+    yield "!";
+  }
+
+  @HttpGet("result-stream")
+  resultStream() {
+    async function* body() {
+      yield "streamed ";
+      yield "body";
+    }
+
+    return new HttpResult(206, body(), {
+      "content-type": "text/plain; charset=utf-8",
+    });
+  }
+
   @HttpPost("create")
   create() {
     return new HttpResult(201, { id: 2 });
@@ -203,6 +222,28 @@ describe("HttpServer resource decorators", () => {
 
     assert.equal(response.status, 201);
     assert.deepEqual(await response.json(), { id: 2 });
+  });
+
+  it("streams async generator handler results without buffering", async () => {
+    const response = await fetch(`${baseUrl}/api/posts/stream`);
+
+    assert.equal(response.status, 200);
+    assert.equal(
+      response.headers.get("content-type"),
+      "application/octet-stream",
+    );
+    assert.equal(await response.text(), "first chunk!");
+  });
+
+  it("streams an async generator used as an HttpResult body", async () => {
+    const response = await fetch(`${baseUrl}/api/posts/result-stream`);
+
+    assert.equal(response.status, 206);
+    assert.equal(
+      response.headers.get("content-type"),
+      "text/plain; charset=utf-8",
+    );
+    assert.equal(await response.text(), "streamed body");
   });
 
   it("parses JSON request bodies", async () => {
