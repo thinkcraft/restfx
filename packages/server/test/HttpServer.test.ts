@@ -380,6 +380,13 @@ class LifecycleResource {
   }
 }
 
+class ProxyUrlResource {
+  @HttpGet()
+  getUrl(context: HttpContext) {
+    return { origin: context.req.url.origin };
+  }
+}
+
 @HttpResource()
 class LifecycleApi extends LifecycleResource {}
 
@@ -418,6 +425,101 @@ describe("HttpServer lifecycle", () => {
     );
     assert.equal(readyResponse.status, 200);
     await server.close();
+  });
+});
+
+describe("HttpServer proxy handling", () => {
+  it("ignores forwarded headers from untrusted peers by default", async () => {
+    const server = new HttpServer(ProxyUrlResource);
+    const listeningServer = server.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const response = await fetch(`${baseUrl}/`, {
+        headers: {
+          "x-forwarded-host": "attacker.example",
+          "x-forwarded-proto": "https",
+        },
+      });
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { origin: baseUrl });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("uses validated forwarded headers only when the peer is trusted", async () => {
+    let remoteAddress: string | undefined;
+    const server = new HttpServer(ProxyUrlResource, {
+      trustProxy: (address) => {
+        remoteAddress = address;
+        return address === "127.0.0.1" || address === "::ffff:127.0.0.1";
+      },
+    });
+    const listeningServer = server.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const response = await fetch(`${baseUrl}/`, {
+        headers: {
+          "x-forwarded-host": "public.example:8443",
+          "x-forwarded-proto": "https",
+        },
+      });
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        origin: "https://public.example:8443",
+      });
+      assert.ok(remoteAddress);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects ambiguous or malformed forwarded values from trusted peers", async () => {
+    const server = new HttpServer(ProxyUrlResource, {
+      trustProxy: () => true,
+    });
+    const listeningServer = server.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      for (const headers of [
+        {
+          "x-forwarded-host": "public.example, attacker.example",
+          "x-forwarded-proto": "https",
+        },
+        {
+          "x-forwarded-host": "public.example/path",
+          "x-forwarded-proto": "https",
+        },
+        {
+          "x-forwarded-host": "public.example",
+          "x-forwarded-proto": "javascript",
+        },
+      ]) {
+        const response = await fetch(`${baseUrl}/`, { headers });
+        assert.equal(response.status, 400);
+        assert.deepEqual(await response.json(), {
+          message:
+            headers["x-forwarded-proto"] === "javascript"
+              ? "Invalid forwarded protocol"
+              : headers["x-forwarded-host"].includes(",")
+                ? "Multiple x-forwarded-host values are not allowed"
+                : "Invalid Host header",
+        });
+      }
+    } finally {
+      await server.close();
+    }
   });
 });
 

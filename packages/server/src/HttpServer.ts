@@ -14,13 +14,23 @@ import { HttpHeaderName } from "./HttpHeaderName.js";
 import { HttpMediaType } from "./HttpMediaType.js";
 import { HttpRouter } from "./routing/HttpRouter.js";
 
+export interface HttpServerOptions {
+  /**
+   * Return true only when the connecting peer is a trusted reverse proxy.
+   * Forwarded headers are ignored by default.
+   */
+  readonly trustProxy?: (remoteAddress: string | undefined) => boolean;
+}
+
 export class HttpServer {
   private readonly _server: Server;
   private readonly _router: HttpRouter;
+  private readonly _trustProxy?: HttpServerOptions["trustProxy"];
   private _closePromise?: Promise<void>;
 
-  constructor(rootResource: new () => object) {
+  constructor(rootResource: new () => object, options: HttpServerOptions = {}) {
     this._router = new HttpRouter(rootResource);
+    this._trustProxy = options.trustProxy;
     this._server = createServer(this.handleRequest.bind(this));
   }
 
@@ -49,7 +59,10 @@ export class HttpServer {
   private async handleRequest(req: IncomingMessage, res: ServerResponse) {
     try {
       const context = new HttpContext(
-        new HttpRequest(req),
+        new HttpRequest(
+          req,
+          this._trustProxy?.(req.socket.remoteAddress) ?? false,
+        ),
         new HttpResponse(res),
       );
       const result = await this._router.dispatch(context);
