@@ -41,14 +41,19 @@ values taking precedence.
 
 ## Generate a client
 
-Start the API, then run the generator from the workspace:
+Build the client package once, start the API, then run the generator from the
+workspace:
 
 ```sh
+pnpm --filter @restfx/client build
 pnpm --filter @restfx/client generate -- \
   --spec http://localhost:3000/openapi.json \
   --models ./models.js \
   --out ../../apps/playground/src/api-client.ts
 ```
+
+When installed as a dependency, the same generator is available as the
+`restfx-client` command (or `pnpm exec restfx-client` in a pnpm project).
 
 Arguments:
 

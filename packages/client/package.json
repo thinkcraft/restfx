@@ -1,10 +1,27 @@
 {
   "name": "@restfx/client",
   "version": "0.1.0",
+  "description": "Browser fetch client and OpenAPI client generator for RestFX.",
   "license": "Apache-2.0",
+  "keywords": [
+    "restfx",
+    "fetch",
+    "openapi",
+    "typescript",
+    "client"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "restfx-client": "./cli/generate.mjs"
+  },
+  "files": [
+    "dist",
+    "cli/generate.mjs",
+    "README.md",
+    "LICENSE"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -13,7 +30,8 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "generate": "node --import tsx ./cli/generate.ts",
+    "prepack": "pnpm build",
+    "generate": "node ./cli/generate.mjs",
     "test": "pnpm build && node --import tsx --test ./test",
     "typecheck": "tsc -b --pretty false"
   },

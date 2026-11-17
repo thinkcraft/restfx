@@ -1,7 +1,9 @@
+#!/usr/bin/env node
+
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { generateClient } from "../src/generate.js";
+import { generateClient } from "../dist/generate.js";
 
 async function main() {
   const args = parseArguments(process.argv.slice(2));
@@ -25,15 +27,10 @@ async function main() {
   console.log(`Generated API client: ${output}`);
 }
 
-function parseArguments(args: string[]) {
-  const result: {
-    spec?: string;
-    models?: string;
-    out?: string;
-    help?: boolean;
-  } = {};
+function parseArguments(args) {
+  const result = {};
   for (let index = 0; index < args.length; index++) {
-    const argument = args[index]!;
+    const argument = args[index];
     if (argument === "--help" || argument === "-h") {
       result.help = true;
       continue;
@@ -50,7 +47,7 @@ function parseArguments(args: string[]) {
   return result;
 }
 
-async function readOpenApi(spec: string) {
+async function readOpenApi(spec) {
   try {
     const url = new URL(spec);
     if (url.protocol === "http:" || url.protocol === "https:") {
@@ -78,7 +75,7 @@ async function readOpenApi(spec: string) {
 }
 
 function printHelp() {
-  console.log(`Usage: pnpm --filter @restfx/client generate -- --spec <url-or-file> --models <module-specifier> --out <file>
+  console.log(`Usage: restfx-client --spec <url-or-file> --models <module-specifier> --out <file>
 
 Generate a thin TypeScript fetch client from the framework OpenAPI document.
 The --models value is the import specifier from the generated file to the module
@@ -86,7 +83,7 @@ that exports the shared model classes (for example, ./models.js).
 `);
 }
 
-main().catch((error: unknown) => {
+main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });

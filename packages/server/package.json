@@ -1,13 +1,26 @@
 {
   "name": "@restfx/server",
   "version": "0.1.0",
+  "description": "Node.js HTTP server with decorated resources, routing, middleware, and OpenAPI for RestFX.",
   "license": "Apache-2.0",
+  "keywords": [
+    "restfx",
+    "http",
+    "server",
+    "typescript",
+    "openapi"
+  ],
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -16,6 +29,7 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "prepack": "pnpm build",
     "test": "node --import tsx --test ./test",
     "typecheck": "tsc -b --pretty false",
     "bench:routing": "node --import tsx ./bench/routing.bench.ts",
