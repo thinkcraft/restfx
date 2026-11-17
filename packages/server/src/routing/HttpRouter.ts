@@ -20,7 +20,7 @@ export class HttpRouter {
   }
 
   async dispatch(context: HttpContext): Promise<HttpRouterResult> {
-    const path = normalizePath(context.req.url.pathname);
+    const path = context.req.url.pathname;
     const method = context.req.method;
     const matches = this._routes
       .map((candidate) => ({

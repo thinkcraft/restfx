@@ -1,12 +1,9 @@
 import { IncomingMessage } from "node:http";
 
 export class HttpRequest {
+  readonly method: string;
   readonly url: URL;
   params: Record<string, string> = {};
-
-  get method() {
-    return this.req.method?.toUpperCase() ?? "GET";
-  }
 
   get status() {
     return this.req.statusCode;
@@ -17,6 +14,7 @@ export class HttpRequest {
     const host =
       req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost";
 
+    this.method = this.req.method?.toUpperCase() ?? "GET";
     this.url = new URL(req.url!, `${proto}://${host}`);
   }
 }

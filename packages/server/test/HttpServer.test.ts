@@ -34,10 +34,10 @@ class PostsResource {
   }
 }
 
-class CommentsResource {
+class UsersResource {
   @HttpGet()
   list() {
-    return [{ id: "c1" }];
+    return [{ id: "u1" }];
   }
 }
 
@@ -47,7 +47,7 @@ class TestApi {
   static readonly posts = new PostsResource();
 
   @HttpResource()
-  readonly comments = new CommentsResource();
+  readonly users = new UsersResource();
 }
 
 describe("HttpServer resource decorators", () => {
@@ -73,10 +73,10 @@ describe("HttpServer resource decorators", () => {
   });
 
   it("registers instance resource fields", async () => {
-    const response = await fetch(`${baseUrl}/api/comments`);
+    const response = await fetch(`${baseUrl}/api/users`);
 
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), [{ id: "c1" }]);
+    assert.deepEqual(await response.json(), [{ id: "u1" }]);
   });
 
   it("supports handler paths and HttpResult status codes", async () => {
