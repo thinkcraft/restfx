@@ -231,9 +231,11 @@ async create(context: HttpContext) {
 ```
 
 The server validates a declared request model before invoking the handler;
-invalid model data returns `422` with field-path issues. Response models validate
-JSON results and strip undeclared fields. They do not apply to raw streamed
-responses or streamed request bodies.
+`parseBody()` returns an instance of that model, with undeclared fields stripped
+by default. The model constructor is not invoked during validation. Invalid model
+data returns `422` with field-path issues. Response models validate JSON results
+and strip undeclared fields. They do not apply to raw streamed responses or
+streamed request bodies.
 
 ### Raw streaming uploads
 

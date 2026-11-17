@@ -117,8 +117,12 @@ function captureModelError(action: () => unknown) {
   assert.fail("Expected model validation to fail");
 }
 
+function assertModelData(actual: object, expected: object) {
+  assert.deepEqual({ ...actual }, expected);
+}
+
 describe("shared model decorators", () => {
-  it("validates fields and returns a plain object containing declared fields", () => {
+  it("validates fields and returns a model instance with declared fields", () => {
     const value = validateModel(
       {
         name: "Jane",
@@ -129,20 +133,24 @@ describe("shared model decorators", () => {
       ProfileModel,
     );
 
-    assert.deepEqual(value, {
-      name: "Jane",
-      email: "jane@example.com",
-      tags: ["admin"],
-    });
-    assert.equal(Object.getPrototypeOf(value), Object.prototype);
+    assert.equal(value instanceof ProfileModel, true);
+    assert.deepEqual(
+      { ...value },
+      {
+        name: "Jane",
+        email: "jane@example.com",
+        tags: ["admin"],
+      },
+    );
+    assert.equal(Object.getPrototypeOf(value), ProfileModel.prototype);
   });
 
   it("applies defaults only to omitted fields and strips unknown fields", () => {
-    assert.deepEqual(validateModel({ ignored: true }, DefaultedModel), {
+    assertModelData(validateModel({ ignored: true }, DefaultedModel), {
       name: "guest",
       tags: ["new"],
     });
-    assert.deepEqual(
+    assertModelData(
       validateModel(
         { name: "Ada", tags: ["custom"], ignored: true },
         DefaultedModel,
@@ -195,13 +203,13 @@ describe("shared model decorators", () => {
       { required: "yes", nullable: null },
       PresenceModel,
     );
-    assert.deepEqual(omitted, {
+    assertModelData(omitted, {
       required: "yes",
       nullable: null,
       nullDefault: null,
     });
 
-    assert.deepEqual(
+    assertModelData(
       validateModel(
         {
           required: "yes",
@@ -240,7 +248,7 @@ describe("shared model decorators", () => {
   });
 
   it("accepts inclusive scalar and array constraint boundaries", () => {
-    assert.deepEqual(
+    assertModelData(
       validateModel(
         {
           code: "AB",
@@ -259,7 +267,7 @@ describe("shared model decorators", () => {
         labels: ["one"],
       },
     );
-    assert.deepEqual(
+    assertModelData(
       validateModel(
         {
           code: "ABCD",
@@ -349,7 +357,7 @@ describe("shared model decorators", () => {
   });
 
   it("supports per-call unknown-field policy overrides", () => {
-    assert.deepEqual(
+    assertModelData(
       validateModel({ name: "Jane", tags: ["one"], extra: true }, ProfileModel),
       { name: "Jane", tags: ["one"] },
     );
@@ -375,7 +383,7 @@ describe("shared model decorators", () => {
       { path: "extra", message: "Unknown field" },
     ]);
 
-    assert.deepEqual(
+    assertModelData(
       validateModel(
         { name: "Jane", tags: ["one"], extra: true },
         StrictProfileModel,
@@ -386,7 +394,7 @@ describe("shared model decorators", () => {
   });
 
   it("inherits fields and model options", () => {
-    assert.deepEqual(
+    assertModelData(
       validateModel({ inherited: "base", own: 1, ignored: true }, DerivedModel),
       { inherited: "base", own: 1 },
     );
@@ -459,7 +467,8 @@ describe("shared model decorators", () => {
       SpecialPropertyModel,
     );
 
-    assert.equal(Object.getPrototypeOf(value), Object.prototype);
+    assert.equal(Object.getPrototypeOf(value), SpecialPropertyModel.prototype);
+    assert.equal(value instanceof SpecialPropertyModel, true);
     assert.equal(Object.hasOwn(value, "__proto__"), true);
     assert.equal(
       (value as unknown as Record<string, unknown>)["__proto__"],

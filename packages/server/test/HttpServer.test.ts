@@ -158,6 +158,12 @@ class UsersResource {
     };
   }
 
+  @HttpPost("instance", { body: CreateUserModel })
+  async checkBodyInstance(context: HttpContext) {
+    const input = await context.req.parseBody<CreateUserModel>();
+    return { isInstance: input instanceof CreateUserModel };
+  }
+
   @HttpGet("invalid-response", { response: UserResponseModel })
   invalidResponse() {
     return { id: 123, email: "not-an-email", name: "Invalid" };
@@ -440,6 +446,17 @@ describe("HttpServer resource decorators", () => {
       email: "jane@example.com",
       name: "Jane",
     });
+  });
+
+  it("returns a request-model instance from parseBody", async () => {
+    const response = await fetch(`${baseUrl}/api/users/instance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "jane@example.com", name: "Jane" }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { isInstance: true });
   });
 
   it("returns structured validation issues for invalid request models", async () => {

@@ -7,7 +7,10 @@ import { cloneDefault, validateConstraints } from "./fieldOptions.js";
 import { ModelValidationError } from "./ModelValidationError.js";
 import { getModelMetadata } from "./metadata.js";
 
-/** Validates and returns a plain object containing only declared model fields. */
+/**
+ * Validates and returns a model instance containing only declared model fields.
+ * The instance is created without invoking the model constructor.
+ */
 export function validateModel<T>(
   value: unknown,
   model: ModelConstructor<T>,
@@ -38,7 +41,7 @@ export function validateModel<T>(
     }
   }
 
-  const output: Record<string, unknown> = {};
+  const output = Object.create(model.prototype) as Record<string, unknown>;
   const assign = (name: string, fieldValue: unknown) => {
     Object.defineProperty(output, name, {
       configurable: true,
