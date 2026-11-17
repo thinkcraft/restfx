@@ -185,6 +185,7 @@ export class RadixRouter {
 
 function parseRouteSegments(segments: string[]): RouteSegment[] {
   const names = new Set<string>();
+  // noinspection TypeScriptExplicitMemberType
   const parsed = segments.map((segment, index): RouteSegment => {
     if (!segment.startsWith(":")) return { type: "static", value: segment };
 
@@ -264,11 +265,9 @@ function matchPattern(
       delete params[segment.name];
     }
 
-    if (segment.type === "optional" && visit(routeIndex + 1, requestIndex)) {
-      return true;
-    }
+    return segment.type === "optional" && visit(routeIndex + 1, requestIndex);
 
-    return false;
+
   };
 
   return visit(0, 0) ? params : undefined;
