@@ -1,5 +1,5 @@
 import { HttpGet, HttpResource, OpenApiMiddleware } from "@framework/server";
-import { WorkspacesResource } from "./resources.js";
+import { WorkspacesResource } from "./resources/index.js";
 
 @OpenApiMiddleware({
   path: "/openapi.json",

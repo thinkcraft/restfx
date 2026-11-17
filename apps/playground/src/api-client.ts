@@ -17,7 +17,7 @@ import {
   UpdateProjectRequest,
   UpdateTaskBody,
   UpdateTaskRequest,
-} from "./models.js";
+} from "./models/index.js";
 
 export class ApiError extends Error {
   constructor(
