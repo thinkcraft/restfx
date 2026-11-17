@@ -1,5 +1,6 @@
 export interface ClientOptions {
   baseUrl?: string;
+  credentials?: RequestCredentials;
   fetch?: typeof fetch;
   headers?: HeadersInit;
 }
@@ -25,7 +26,11 @@ export function createClient(options: ClientOptions = {}) {
       new Headers(init?.headers).forEach((value, name) =>
         headers.set(name, value),
       );
-      return fetcher(url, { ...init, headers });
+      return fetcher(url, {
+        ...init,
+        credentials: init?.credentials ?? options.credentials,
+        headers,
+      });
     },
   };
 }

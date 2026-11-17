@@ -137,11 +137,14 @@ describe("API client generator", () => {
       );
       let fetchCalls = 0;
       let requestedUrl = "";
+      let requestCredentials: RequestCredentials | undefined;
       const api = generatedClient.createApiClient({
         baseUrl: "http://example.test",
-        fetch: async (input: URL | RequestInfo) => {
+        credentials: "include",
+        fetch: async (input: URL | RequestInfo, init?: RequestInit) => {
           fetchCalls++;
           requestedUrl = String(input);
+          requestCredentials = init?.credentials;
           return new Response(
             JSON.stringify({ id: "550e8400-e29b-41d4-a716-446655440000" }),
             { status: 201, headers: { "content-type": "application/json" } },
@@ -171,6 +174,7 @@ describe("API client generator", () => {
         requestedUrl,
         "http://example.test/records/550e8400-e29b-41d4-a716-446655440000",
       );
+      assert.equal(requestCredentials, "include");
       assert.equal(response.id, "550e8400-e29b-41d4-a716-446655440000");
 
       const failedApi = generatedClient.createApiClient({

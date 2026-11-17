@@ -26,6 +26,7 @@ import { createClient } from "@restfx/client";
 const client = createClient({
   baseUrl: "https://api.example.test/v1/",
   headers: { authorization: `Bearer ${token}` },
+  credentials: "include",
 });
 
 const response = await client.request("users", { method: "GET" });
@@ -37,7 +38,12 @@ const users: unknown = await response.json();
 origin, or `http://localhost` in environments without `location`. Supply a
 custom Fetch-compatible function with `fetch` for testing or a custom runtime.
 Configured headers are combined with per-request headers, with the per-request
-values taking precedence.
+values taking precedence. `credentials` sets Fetch's cookie and credential
+policy (`"omit"`, `"same-origin"`, or `"include"`); it defaults to Fetch's
+standard behavior, and a per-request `RequestInit.credentials` overrides it.
+For cross-origin browser requests with `"include"`, the server must also allow
+credentialed CORS requests and the cookies must satisfy the browser's cookie
+policies.
 
 ## Generate a client
 
@@ -80,6 +86,7 @@ import { createApiClient } from "./api-client.js";
 const api = createApiClient({
   baseUrl: "https://api.example.test",
   headers: { authorization: `Bearer ${token}` },
+  credentials: "include",
 });
 
 const record = await api.records.create({ id, payload: { name: "Example" } });
