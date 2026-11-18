@@ -226,6 +226,19 @@ class UsersResource {
     return { id: 123, email: "not-an-email", name: "Invalid" };
   }
 
+  @HttpGet({ path: "writer-response", response: UserResponseModel })
+  writerResponse() {
+    return new HttpResult(
+      200,
+      async (sink) => {
+        await sink.write(
+          JSON.stringify({ id: 123, email: "not-an-email", name: "Invalid" }),
+        );
+      },
+      { "content-type": "application/json" },
+    );
+  }
+
   @HttpGet({
     path: "invalid-response-array",
     response: { arrayOf: UserResponseModel },
@@ -294,6 +307,9 @@ let pendingStreamStarted = deferred();
 let releasePendingStream!: () => void;
 let pendingStreamFinalized = deferred();
 let noConsumeStreamStarted = 0;
+let bodyWriterStarted = 0;
+let bodyWriterErrorAfterStarted = deferred();
+let releaseBodyWriterErrorAfter!: () => void;
 let backpressurePulls = 0;
 let releaseErrorAfterFirstChunk!: () => void;
 let releaseInvalidAfterFirstChunk!: () => void;
@@ -385,6 +401,38 @@ class StreamingBehaviorResource {
   async *headStream() {
     noConsumeStreamStarted++;
     yield "not consumed";
+  }
+
+  @HttpGet({ path: "body-writer" })
+  bodyWriter() {
+    return new HttpResult(
+      202,
+      async (sink) => {
+        bodyWriterStarted++;
+        await sink.write("first ");
+        await sink.write(Buffer.from("writer"));
+      },
+      { "content-type": "text/plain; charset=utf-8" },
+    );
+  }
+
+  @HttpGet({ path: "body-writer-error-before" })
+  bodyWriterErrorBefore() {
+    return new HttpResult(200, async () => {
+      throw new Error("body writer failed before writing");
+    });
+  }
+
+  @HttpGet({ path: "body-writer-error-after" })
+  bodyWriterErrorAfter() {
+    return new HttpResult(200, async (sink) => {
+      await sink.write("first");
+      bodyWriterErrorAfterStarted.resolve();
+      await new Promise<void>((resolve) => {
+        releaseBodyWriterErrorAfter = resolve;
+      });
+      throw new Error("body writer failed after writing");
+    });
   }
 
   @HttpGet({ path: "no-content-stream" })
@@ -873,6 +921,17 @@ describe("HttpServer resource decorators", () => {
     });
   });
 
+  it("does not validate a response body writer as a model value", async () => {
+    const response = await fetch(`${baseUrl}/api/users/writer-response`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      id: 123,
+      email: "not-an-email",
+      name: "Invalid",
+    });
+  });
+
   it("validates each item in array response models", async () => {
     const response = await fetch(`${baseUrl}/api/users/invalid-response-array`);
 
@@ -1325,6 +1384,42 @@ describe("HttpServer streaming behavior", () => {
     assert.equal(notModified.status, 304);
     assert.equal(await notModified.text(), "");
     assert.equal(noConsumeStreamStarted, 0);
+  });
+
+  it("awaits response body writers and skips them for HEAD requests", async () => {
+    bodyWriterStarted = 0;
+
+    const head = await fetch(`${baseUrl}/body-writer`, { method: "HEAD" });
+    assert.equal(head.status, 202);
+    assert.equal(head.headers.get("content-type"), "text/plain; charset=utf-8");
+    assert.equal(await head.text(), "");
+    assert.equal(bodyWriterStarted, 0);
+
+    const response = await fetch(`${baseUrl}/body-writer`);
+    assert.equal(response.status, 202);
+    assert.equal(await response.text(), "first writer");
+    assert.equal(bodyWriterStarted, 1);
+  });
+
+  it("handles body writer errors before and after writing starts", async () => {
+    const before = await fetch(`${baseUrl}/body-writer-error-before`);
+    assert.equal(before.status, 500);
+    assert.deepEqual(await before.json(), {
+      message: "Internal Server Error",
+    });
+    assert.match(before.headers.get("content-type") ?? "", /application\/json/);
+
+    bodyWriterErrorAfterStarted = deferred();
+    const after = await fetch(`${baseUrl}/body-writer-error-after`);
+    const reader = after.body!.getReader();
+    assert.equal(
+      new TextDecoder().decode((await reader.read()).value),
+      "first",
+    );
+
+    await bodyWriterErrorAfterStarted.promise;
+    releaseBodyWriterErrorAfter();
+    await assert.rejects(reader.read());
   });
 
   it(

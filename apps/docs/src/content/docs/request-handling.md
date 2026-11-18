@@ -60,7 +60,7 @@ async create(context: HttpContext) {
 Invalid model data returns `422` with field-path issues. A response model
 validates and shapes JSON output, stripping undeclared fields; use
 `response: { arrayOf: UserResponse }` for a list. Response models do not apply
-to streams or raw responses.
+to streams, body writers, or raw responses.
 
 ## Combine path, query, header, and body values
 
@@ -142,6 +142,32 @@ async *events(context: HttpContext) {
   yield "event: ready\ndata: connected\n\n";
 }
 ```
+
+For custom output such as rendered HTML, pass an async body writer as the
+`HttpResult` body. It receives a sink whose `write()` waits for backpressure;
+the server ends the response when the writer completes. Set the content type in
+the result headers:
+
+```ts
+@HttpGet({ path: "page" })
+async page() {
+  return new HttpResult(
+    200,
+    async (sink) => {
+      await sink.write("<main>");
+      await sink.write(await renderPage());
+      await sink.write("</main>");
+    },
+    { "content-type": "text/html; charset=utf-8" },
+  );
+}
+```
+
+Writer chunks must be strings or `Uint8Array` values, including `Buffer`. If no
+content type is provided, writers default to `application/octet-stream`. For
+`HEAD`, `204`, and `304` responses the writer is not invoked. A writer error
+before output begins can produce the normal error response; after output starts,
+the connection is closed because the partial response cannot be replaced.
 
 For uploads, `context.req.streamBody({ maxBytes })` returns a one-shot Node
 readable stream, defaulting to the same 1 MiB limit. Pipe it directly to storage

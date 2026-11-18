@@ -168,14 +168,14 @@ export class HttpRouter {
     );
     if (match.route.responseModel) {
       if (value instanceof HttpResult) {
-        if (value.body !== undefined) {
+        if (value.body !== undefined && typeof value.body !== "function") {
           value = new HttpResult(
             value.status,
             validateResponseModel(value.body, match.route.responseModel),
             value.headers,
           );
         }
-      } else {
+      } else if (typeof value !== "function") {
         value = validateResponseModel(value, match.route.responseModel);
       }
     }

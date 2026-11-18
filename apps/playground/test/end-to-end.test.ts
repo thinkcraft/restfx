@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
+import { request as httpRequest, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { describe, it } from "node:test";
 import { ApiError, createApiClient } from "../src/api-client.js";
@@ -137,6 +138,21 @@ describe("playground end-to-end API", () => {
           items: { $ref: "#/components/schemas/ProjectResponse" },
         },
       );
+
+      const templateResponse = await fetch(
+        `${baseUrl}/template?name=%3Cscript%3Ealert(1)%3C%2Fscript%3E`,
+      );
+      assert.equal(templateResponse.status, 200);
+      assert.match(
+        templateResponse.headers.get("content-type") ?? "",
+        /^text\/html; charset=utf-8$/,
+      );
+      const templateHtml = await templateResponse.text();
+      assert.match(
+        templateHtml,
+        /Hello, &lt;script&gt;alert\(1\)&lt;&#x2F;script&gt;!/,
+      );
+      assert.doesNotMatch(templateHtml, /<script>/);
 
       const workspacesResponse = await fetch(`${baseUrl}/workspaces`);
       assert.equal(workspacesResponse.status, 200);
@@ -280,15 +296,36 @@ describe("playground end-to-end API", () => {
       assert.equal(missingAttachment.status, 404);
 
       const oversizedAttachmentId = `e2e-large-${randomUUID()}`;
-      const oversizedUpload = await fetch(
-        `${baseUrl}/attachments/${oversizedAttachmentId}`,
-        {
-          method: "PUT",
-          headers: { "content-type": "application/octet-stream" },
-          body: Buffer.alloc(5 * 1024 * 1024 + 1),
+      // The server rejects from Content-Length before reading the body and closes
+      // incomplete requests; avoid a large in-flight payload resetting fetch.
+      const oversizedUpload = await new Promise<IncomingMessage>(
+        (resolve, reject) => {
+          const outgoing = httpRequest(
+            `${baseUrl}/attachments/${oversizedAttachmentId}`,
+            {
+              method: "PUT",
+              headers: {
+                "content-type": "application/octet-stream",
+                "content-length": 5 * 1024 * 1024 + 1,
+              },
+            },
+            resolve,
+          );
+          outgoing.once("error", reject);
+          outgoing.end();
         },
       );
-      assert.equal(oversizedUpload.status, 413);
+      assert.equal(oversizedUpload.statusCode, 413);
+      const oversizedUploadChunks: Buffer[] = [];
+      for await (const chunk of oversizedUpload) {
+        oversizedUploadChunks.push(
+          Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
+        );
+      }
+      assert.deepEqual(
+        JSON.parse(Buffer.concat(oversizedUploadChunks).toString()),
+        { message: "Request body exceeds the maximum allowed size" },
+      );
       const rejectedAttachment = await fetch(
         `${baseUrl}/attachments/${oversizedAttachmentId}`,
       );

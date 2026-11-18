@@ -1,9 +1,16 @@
-import { HttpGet, HttpResource, OpenApiMiddleware } from "@restfx/server";
+import {
+  HttpContext,
+  HttpGet,
+  Inject,
+  HttpResource,
+  OpenApiMiddleware,
+} from "@restfx/server";
 import {
   AttachmentsResource,
   AuthResource,
   WorkspacesResource,
 } from "./resources/index.js";
+import { HtmlTemplateEngine } from "./services/HtmlTemplateEngine.js";
 
 @OpenApiMiddleware({
   path: "/openapi.json",
@@ -24,6 +31,9 @@ import {
 })
 @HttpResource()
 export class PlaygroundApi {
+  @Inject(HtmlTemplateEngine)
+  private readonly templates!: HtmlTemplateEngine;
+
   @HttpGet({
     summary: "Playground API overview",
     tags: ["Meta"],
@@ -45,6 +55,15 @@ export class PlaygroundApi {
   })
   getHealth() {
     return { healthy: true, timestamp: new Date().toISOString() };
+  }
+
+  @HttpGet({
+    path: "template",
+    summary: "Render an example HTML page",
+  })
+  getTemplate(context: HttpContext) {
+    const name = context.req.url.searchParams.get("name") ?? "RestFX";
+    return this.templates.render("greeting", { name });
   }
 
   readonly workspaces = new WorkspacesResource();

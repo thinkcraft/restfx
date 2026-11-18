@@ -28,6 +28,10 @@ export { HttpRequest } from "./HttpRequest.js";
 export type { HttpRequestBodyStreamOptions } from "./parsing/createRequestBodyStream.js";
 export { HttpResponse } from "./HttpResponse.js";
 export { HttpResult } from "./HttpResult.js";
+export type {
+  HttpResponseBodySink,
+  HttpResponseBodyWriter,
+} from "./HttpResult.js";
 export { HttpStatusCode } from "./HttpStatusCode.js";
 export { HttpHeaderName } from "./HttpHeaderName.js";
 export { HttpMediaType } from "./HttpMediaType.js";

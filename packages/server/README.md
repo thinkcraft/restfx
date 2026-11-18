@@ -175,11 +175,13 @@ Cookie/session storage and signing remain application responsibilities.
 
 ### Streaming responses
 
-Return an async generator directly, or use one as an `HttpResult` body. Each
-yielded chunk must be a string or `Uint8Array` (including `Buffer`). Chunks are
-written as they are produced with backpressure; they are not collected into a
-single body. Set a response `content-type` header explicitly when appropriate;
-otherwise streams default to `application/octet-stream`.
+Return an async generator directly, use one as an `HttpResult` body, or provide
+an async body writer. Stream and writer chunks must be strings or `Uint8Array`
+(including `Buffer`). Chunks are written as they are produced with backpressure;
+they are not collected into a single body. Set a response `content-type` header
+explicitly when appropriate; otherwise streams and writers default to
+`application/octet-stream`. A body writer is not invoked for `HEAD`, `204`, or
+`304` responses.
 
 ```ts
 @HttpGet({ path: "events" })
@@ -199,12 +201,25 @@ download() {
     "content-type": "application/octet-stream",
   });
 }
+
+@HttpGet({ path: "rendered" })
+rendered() {
+  return new HttpResult(
+    200,
+    async (sink) => {
+      await sink.write("<main>");
+      await sink.write(await renderPage());
+      await sink.write("</main>");
+    },
+    { "content-type": "text/html; charset=utf-8" },
+  );
+}
 ```
 
-For `HEAD` requests and bodyless statuses (`204` and `304`), the generator is
-not consumed. If a generator fails after response data has started, the server
-closes the connection because it can no longer replace the partial response
-with an error response.
+For `HEAD` requests and bodyless statuses (`204` and `304`), generators are not
+consumed and body writers are not invoked. If a generator or writer fails after
+response data has started, the server closes the connection because it can no
+longer replace the partial response with an error response.
 
 ## Resources and handlers
 

@@ -1,7 +1,11 @@
 import { ServerResponse } from "node:http";
 import { HttpHeaderName } from "./HttpHeaderName.js";
 import { HttpMediaType } from "./HttpMediaType.js";
-import { HttpResult } from "./HttpResult.js";
+import {
+  HttpResult,
+  type HttpResponseBodySink,
+  type HttpResponseBodyWriter,
+} from "./HttpResult.js";
 import { HttpStatusCode } from "./HttpStatusCode.js";
 
 const streamClosed: unique symbol = Symbol("stream closed");
@@ -61,6 +65,12 @@ export class HttpResponse {
       } else {
         await this.sendStream(body);
       }
+    } else if (isHttpResponseBodyWriter(body)) {
+      if (headRequest) {
+        this.res.end();
+      } else {
+        await this.sendWriter(body);
+      }
     } else {
       const output = JSON.stringify(body);
       if (!this.res.hasHeader(HttpHeaderName.ContentType)) {
@@ -93,12 +103,7 @@ export class HttpResponse {
     const closedResult = closed.then((): typeof streamClosed => streamClosed);
     let completed = false;
 
-    if (!this.res.hasHeader(HttpHeaderName.ContentType)) {
-      this.res.setHeader(
-        HttpHeaderName.ContentType,
-        "application/octet-stream",
-      );
-    }
+    this.setDefaultStreamContentType();
 
     try {
       while (!this.res.destroyed) {
@@ -109,14 +114,7 @@ export class HttpResponse {
           break;
         }
 
-        const chunk = next.value;
-        if (typeof chunk !== "string" && !(chunk instanceof Uint8Array)) {
-          throw new TypeError(
-            "Streaming response chunks must be strings or Uint8Array values",
-          );
-        }
-
-        if (!this.res.write(chunk) && !(await waitForDrain(this.res))) return;
+        if (!(await this.writeChunk(next.value))) return;
       }
 
       if (!this.res.destroyed && !this.res.writableEnded) {
@@ -130,6 +128,60 @@ export class HttpResponse {
       }
     }
   }
+
+  private async sendWriter(writer: HttpResponseBodyWriter) {
+    let pendingWrite = Promise.resolve();
+    const sink: HttpResponseBodySink = {
+      write: (chunk) => {
+        const write = pendingWrite.then(async () => {
+          await this.writeChunk(chunk, true);
+        });
+        pendingWrite = write;
+        return write;
+      },
+    };
+
+    try {
+      await writer(sink);
+      await pendingWrite;
+    } catch (error) {
+      await pendingWrite.catch(() => {});
+      throw error;
+    }
+
+    if (!this.res.destroyed && !this.res.writableEnded) {
+      this.setDefaultStreamContentType();
+      this.res.end();
+    }
+  }
+
+  private setDefaultStreamContentType() {
+    if (!this.res.hasHeader(HttpHeaderName.ContentType)) {
+      this.res.setHeader(
+        HttpHeaderName.ContentType,
+        "application/octet-stream",
+      );
+    }
+  }
+
+  private async writeChunk(chunk: unknown, setDefaultContentType = false) {
+    if (typeof chunk !== "string" && !(chunk instanceof Uint8Array)) {
+      throw new TypeError(
+        "Streaming response chunks must be strings or Uint8Array values",
+      );
+    }
+
+    if (this.res.destroyed || this.res.writableEnded) return false;
+    if (setDefaultContentType) this.setDefaultStreamContentType();
+    if (!this.res.write(chunk) && !(await waitForDrain(this.res))) return false;
+    return true;
+  }
+}
+
+function isHttpResponseBodyWriter(
+  value: unknown,
+): value is HttpResponseBodyWriter {
+  return typeof value === "function";
 }
 
 function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
