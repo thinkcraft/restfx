@@ -43,6 +43,8 @@ export { Inject } from "./decorators/Inject.js";
 export { HttpMiddleware } from "./decorators/HttpMiddleware.js";
 export { CorsMiddleware } from "./decorators/CorsMiddleware.js";
 export type { CorsMiddlewareOptions } from "./decorators/CorsMiddleware.js";
+export { SecurityHeadersMiddleware } from "./decorators/SecurityHeadersMiddleware.js";
+export type { SecurityHeadersMiddlewareOptions } from "./decorators/SecurityHeadersMiddleware.js";
 export { OpenApiMiddleware } from "./decorators/OpenApiMiddleware.js";
 export {
   Body,

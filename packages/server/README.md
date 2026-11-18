@@ -358,6 +358,26 @@ otherwise only configured headers are accepted. `credentials`, `exposedHeaders`,
 and `maxAge` are optional. The middleware adds the appropriate `Vary` headers
 for origin and preflight request fields.
 
+Use `@SecurityHeadersMiddleware()` to set common response security headers on a
+resource and its nested resources:
+
+```ts
+import { HttpResource, SecurityHeadersMiddleware } from "@restfx/server";
+
+@SecurityHeadersMiddleware()
+@HttpResource()
+class ApiResource {
+  // Routes...
+}
+```
+
+By default it sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+and `Referrer-Policy: strict-origin-when-cross-origin`. Pass a `headers` object
+to override or add headers; use `false` to disable a default. It does not set
+Content Security Policy or Strict Transport Security automatically: CSP needs
+to match the application's scripts and assets, and HSTS should only be enabled
+when HTTPS is enforced for the whole configured domain.
+
 ```ts
 import {
   HttpGet,
