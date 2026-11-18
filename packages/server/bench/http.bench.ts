@@ -2,6 +2,7 @@ import { fork, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { request as httpRequest, Agent, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import { parseArgs } from "node:util";
@@ -430,13 +431,22 @@ function createExpressServer(): BenchmarkServer {
     response.send(responseBinary);
   });
   app.get("/bench/response/stream", (_request, response) => {
-    for (let index = 0; index < 16; index++) {
-      response.write(responseStreamChunk);
-    }
-    response.end();
+    Readable.from(
+      (async function* () {
+        for (let index = 0; index < 16; index++) {
+          yield responseStreamChunk;
+        }
+      })(),
+      { objectMode: false },
+    ).pipe(response);
   });
   app.get("/bench/response/stream-single", (_request, response) => {
-    response.end(responseStreamSingleChunk);
+    Readable.from(
+      (async function* () {
+        yield responseStreamSingleChunk;
+      })(),
+      { objectMode: false },
+    ).pipe(response);
   });
   app.get(
     "/bench/v1/tenants/:tenantId/projects/:projectId/issues/:issueId",
