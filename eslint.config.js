@@ -6,7 +6,12 @@ export default [
     ignores: ["**/dist/**", "**/node_modules/**", "**/*.d.ts"],
   },
   {
-    files: ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"],
+    files: [
+      "packages/*/src/**/*.ts",
+      "packages/*/test/**/*.ts",
+      "apps/*/src/**/*.ts",
+      "apps/*/test/**/*.ts",
+    ],
     languageOptions: {
       // typescript-eslint does not yet support this workspace's TypeScript 7 version.
       parser: babelParser,
