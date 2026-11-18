@@ -23,6 +23,8 @@ export interface HttpServerOptions {
   readonly serverOptions?: ServerOptions;
   /** Root service container shared by requests. */
   readonly container?: IocContainer;
+  /** Enable the `X-Request-Id` request and response header. Defaults to `true`. */
+  readonly requestId?: boolean;
   /**
    * Return true only when the connecting peer is a trusted reverse proxy.
    * Forwarded headers are ignored by default.
@@ -62,6 +64,7 @@ export class HttpServer {
   private readonly _server: Server;
   private readonly _router: HttpRouter;
   private readonly _trustProxy?: HttpServerOptions["trustProxy"];
+  private readonly _requestIdEnabled: boolean;
   private readonly _errorHandler?: HttpServerOptions["errorHandler"];
   private readonly _onError?: HttpServerOptions["onError"];
   private readonly _onRequest?: HttpServerOptions["onRequest"];
@@ -73,6 +76,7 @@ export class HttpServer {
     this._router = new HttpRouter(rootResource);
     this._container = options.container ?? new IocContainer();
     this._trustProxy = options.trustProxy;
+    this._requestIdEnabled = options.requestId ?? true;
     this._errorHandler = options.errorHandler;
     this._onError = options.onError;
     this._onRequest = options.onRequest;
@@ -129,8 +133,9 @@ export class HttpServer {
     const response = new HttpResponse(res);
     let context: HttpContext | undefined;
     try {
-      const requestId = getRequestId(req.headers[HttpHeaderName.XRequestId]);
-      response.setHeader(HttpHeaderName.XRequestId, requestId);
+      const requestId = this._requestIdEnabled
+        ? getRequestId(req.headers[HttpHeaderName.XRequestId])
+        : undefined;
       context = new HttpContext(
         new HttpRequest(
           req,
@@ -139,6 +144,7 @@ export class HttpServer {
         response,
         requestId,
         this._container.createRequestScope(),
+        { requestIdEnabled: this._requestIdEnabled },
       );
       this.notify(this._onRequest, context);
       const result = await this._router.dispatch(context);

@@ -42,10 +42,12 @@ errors after data has started close the connection because a replacement error
 response is no longer possible. `onResponse` reports status, duration, and
 whether the response completed.
 
-Each request gets a `context.requestId`. A valid incoming `X-Request-Id` token
-(1–128 characters) is retained; otherwise the server creates a UUID. The ID is
-returned in the response header and is available to hooks. Treat a client
-supplied ID as a correlation value, never as identity or authorization data.
+By default, each request gets a `context.requestId`. A valid incoming
+`X-Request-Id` token (1–128 characters) is retained; otherwise the server creates
+a UUID. The ID is returned in the response header and is available to hooks.
+Treat a client-supplied ID as a correlation value, never as identity or
+authorization data. Set `requestId: false` to disable generation and omit the
+request and response header handling; `context.requestId` is then `undefined`.
 
 ## Node server options and lifecycle
 

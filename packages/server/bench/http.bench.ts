@@ -22,9 +22,9 @@ import {
   StringField,
 } from "../src/index.js";
 
-const iterations = readPositiveInteger("BENCH_ITERATIONS", 1_000);
-const samples = readPositiveInteger("BENCH_SAMPLES", 3);
-const warmupIterations = readInteger("BENCH_WARMUP", 100, 0);
+const iterations = readPositiveInteger("BENCH_ITERATIONS", 10_000);
+const samples = readPositiveInteger("BENCH_SAMPLES", 7);
+const warmupIterations = readInteger("BENCH_WARMUP", 1000, 0);
 const { values: cliOptions } = parseArgs({
   options: {
     concurrency: { type: "string", short: "c" },
@@ -357,7 +357,7 @@ async function runServerChild() {
   if (!process.send) throw new Error("Benchmark server requires IPC");
   const server =
     backend === "framework"
-      ? new HttpServer(BenchmarkResource)
+      ? new HttpServer(BenchmarkResource, { requestId: false })
       : createExpressServer();
   const listeningServer = server.listen(0);
   await once(listeningServer, "listening");

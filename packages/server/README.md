@@ -700,7 +700,13 @@ Each request gets a `context.requestId`. The server accepts an incoming
 generates a UUID. The selected ID is returned in the response header and is
 available to the `onRequest`, `onError`, and `onResponse` callbacks. Treat
 client-supplied IDs as correlation values, not trusted identity or authorization
-data.
+data. Set `requestId: false` in `HttpServer` options to disable request ID
+generation, ignore the incoming header, and omit the response header. In that
+case, `context.requestId` is `undefined`:
+
+```ts
+const server = new HttpServer(ApiResource, { requestId: false });
+```
 
 The server options expose lifecycle hooks for application logging and
 observability. `onResponse` receives status, duration, and completion metrics;

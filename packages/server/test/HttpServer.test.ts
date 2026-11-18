@@ -1605,6 +1605,30 @@ describe("HttpServer hooks", () => {
     assert.equal(observedIds.length, 4);
     assert.equal(observedIds[2], observedIds[3]);
   });
+
+  it("can disable request ID generation and headers", async () => {
+    const observedIds: Array<string | undefined> = [];
+    const server = new HttpServer(LifecycleApi, {
+      requestId: false,
+      onRequest: (context) => observedIds.push(context.requestId),
+      onResponse: (context) => observedIds.push(context.requestId),
+    });
+    const listeningServer = server.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/ready`, {
+        headers: { "x-request-id": "client-supplied-id" },
+      });
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.has("x-request-id"), false);
+    } finally {
+      await server.close();
+    }
+
+    assert.deepEqual(observedIds, [undefined, undefined]);
+  });
 });
 
 describe("HttpServer route validation", () => {

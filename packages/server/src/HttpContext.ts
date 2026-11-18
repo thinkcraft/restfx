@@ -12,15 +12,23 @@ export class HttpContext {
   readonly signal: AbortSignal;
   readonly cookies: HttpCookies;
   readonly state: HttpContextState = {};
+  readonly requestId: string | undefined;
 
   constructor(
     readonly req: HttpRequest,
     readonly res: HttpResponse,
-    readonly requestId: string = randomUUID(),
+    requestId?: string,
     readonly container: IocContainer = new IocContainer().createRequestScope(),
+    options: { readonly requestIdEnabled?: boolean } = {},
   ) {
+    this.requestId =
+      options.requestIdEnabled === false
+        ? undefined
+        : (requestId ?? randomUUID());
     this.signal = req.signal;
     this.cookies = new HttpCookies(req.headers.cookie, res);
-    this.res.setHeader(HttpHeaderName.XRequestId, this.requestId);
+    if (this.requestId !== undefined) {
+      this.res.setHeader(HttpHeaderName.XRequestId, this.requestId);
+    }
   }
 }
