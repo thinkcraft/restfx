@@ -169,6 +169,104 @@ content type is provided, writers default to `application/octet-stream`. For
 before output begins can produce the normal error response; after output starts,
 the connection is closed because the partial response cannot be replaced.
 
+### Use a template engine
+
+Template engines fit behind the same `HttpResult` boundary. In your app package,
+add EJS and its TypeScript definitions with `pnpm add ejs` and
+`pnpm add -D @types/ejs`, then wrap rendering and response headers in an
+injectable service. Put the markup in a view file such as
+`views/greeting.ejs`. EJS's `<%= ... %>` tag escapes interpolated values:
+
+```html
+<main><h1>Hello, <%= name %>!</h1></main>
+```
+
+The engine below reads a view on first use, shares an in-flight read between
+concurrent requests, and caches the loaded template for later renders. Its
+`viewsDirectory` is provided when the engine is registered, so each application
+can keep templates wherever it prefers:
+
+```ts
+import { readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import ejs from "ejs";
+import {
+  HttpContext,
+  HttpGet,
+  HttpResource,
+  HttpResult,
+  HttpServer,
+  IocContainer,
+  Inject,
+} from "@restfx/server";
+
+const viewFiles = {
+  greeting: "greeting.ejs",
+} as const;
+
+type ViewName = keyof typeof viewFiles;
+type ViewData = { greeting: Record<string, string> };
+
+class EjsTemplateEngine {
+  private readonly cache = new Map<ViewName, Promise<string>>();
+  private readonly viewsDirectory: string;
+
+  constructor(options: { viewsDirectory?: string } = {}) {
+    this.viewsDirectory = resolve(options.viewsDirectory ?? "views");
+  }
+
+  async render<View extends ViewName>(
+    view: View,
+    data: ViewData[View],
+  ): Promise<HttpResult<string>> {
+    let template = this.cache.get(view);
+    if (!template) {
+      template = readFile(
+        join(this.viewsDirectory, viewFiles[view]),
+        "utf8",
+      ).catch((error: unknown) => {
+        this.cache.delete(view);
+        throw error;
+      });
+      this.cache.set(view, template);
+    }
+
+    return new HttpResult(200, ejs.render(await template, data), {
+      "content-type": "text/html; charset=utf-8",
+    });
+  }
+}
+
+@HttpResource()
+class GreetingResource {
+  @Inject(EjsTemplateEngine)
+  private readonly templates!: EjsTemplateEngine;
+
+  @HttpGet({ path: "greeting" })
+  async getGreeting(context: HttpContext) {
+    const name = context.req.url.searchParams.get("name") ?? "RestFX";
+    return this.templates.render("greeting", { name });
+  }
+}
+
+@HttpResource()
+class ApiResource {
+  readonly greeting = new GreetingResource();
+}
+
+// In src/services/container.ts, this resolves to the app's views/ directory.
+const viewsDirectory = fileURLToPath(new URL("../../views/", import.meta.url));
+const container = new IocContainer().registerSingleton(
+  EjsTemplateEngine,
+  () => new EjsTemplateEngine({ viewsDirectory }),
+);
+new HttpServer(ApiResource, { container }).listen(3000);
+```
+
+The playground has the complete example, including a `GET /template?name=...`
+route.
+
 For uploads, `context.req.streamBody({ maxBytes })` returns a one-shot Node
 readable stream, defaulting to the same 1 MiB limit. Pipe it directly to storage
 using `node:stream/promises` `pipeline()` to preserve backpressure, and pass

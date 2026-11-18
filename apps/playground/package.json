@@ -15,7 +15,11 @@
     "@restfx/client": "workspace:*",
     "@restfx/core": "workspace:*",
     "@restfx/server": "workspace:*",
+    "ejs": "^7.0.2",
     "pino": "^10.4.0",
     "pino-pretty": "^13.2.0"
+  },
+  "devDependencies": {
+    "@types/ejs": "^3.1.5"
   }
 }

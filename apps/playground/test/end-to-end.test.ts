@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import { ApiError, createApiClient } from "../src/api-client.js";
 import { PlaygroundApi } from "../src/api.js";
@@ -14,7 +15,9 @@ const exampleWorkspaceId = "550e8400-e29b-41d4-a716-446655440000";
 describe("playground end-to-end API", () => {
   it("keeps OpenAPI, generated client, validation, and server behavior aligned", async () => {
     const server = new HttpServer(PlaygroundApi, {
-      container: createPlaygroundContainer(),
+      container: createPlaygroundContainer({
+        viewsDirectory: fileURLToPath(new URL("../views/", import.meta.url)),
+      }),
     });
     const listeningServer = server.listen(0);
     await once(listeningServer, "listening");
@@ -150,7 +153,7 @@ describe("playground end-to-end API", () => {
       const templateHtml = await templateResponse.text();
       assert.match(
         templateHtml,
-        /Hello, &lt;script&gt;alert\(1\)&lt;&#x2F;script&gt;!/,
+        /Hello, &lt;script&gt;alert\(1\)&lt;\/script&gt;!/,
       );
       assert.doesNotMatch(templateHtml, /<script>/);
 

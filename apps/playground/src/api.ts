@@ -10,7 +10,7 @@ import {
   AuthResource,
   WorkspacesResource,
 } from "./resources/index.js";
-import { HtmlTemplateEngine } from "./services/HtmlTemplateEngine.js";
+import { EjsTemplateEngine } from "./services/EjsTemplateEngine.js";
 
 @OpenApiMiddleware({
   path: "/openapi.json",
@@ -31,8 +31,8 @@ import { HtmlTemplateEngine } from "./services/HtmlTemplateEngine.js";
 })
 @HttpResource()
 export class PlaygroundApi {
-  @Inject(HtmlTemplateEngine)
-  private readonly templates!: HtmlTemplateEngine;
+  @Inject(EjsTemplateEngine)
+  private readonly templates!: EjsTemplateEngine;
 
   @HttpGet({
     summary: "Playground API overview",
