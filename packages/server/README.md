@@ -374,9 +374,30 @@ class ApiResource {
 By default it sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 and `Referrer-Policy: strict-origin-when-cross-origin`. Pass a `headers` object
 to override or add headers; use `false` to disable a default. It does not set
-Content Security Policy or Strict Transport Security automatically: CSP needs
-to match the application's scripts and assets, and HSTS should only be enabled
-when HTTPS is enforced for the whole configured domain.
+Content Security Policy or Strict Transport Security automatically. Configure
+those policies explicitly when they are appropriate for the application and
+deployment:
+
+```ts
+@SecurityHeadersMiddleware({
+  contentSecurityPolicy: "default-src 'self'",
+  strictTransportSecurity: {
+    maxAge: 31_536_000,
+    includeSubDomains: true,
+  },
+})
+@HttpResource()
+class ApiResource {
+  // Routes...
+}
+```
+
+The CSP value is sent as `Content-Security-Policy`. HSTS `maxAge` is expressed
+in seconds; `includeSubDomains` and `preload` are optional directives. Enable
+HSTS only when HTTPS is enforced for the host and, if `includeSubDomains` is
+used, every subdomain. Setting either dedicated option to `false` omits that
+header. Dedicated CSP and HSTS options take precedence over entries with the
+same header name in `headers`.
 
 ```ts
 import {

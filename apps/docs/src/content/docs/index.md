@@ -33,7 +33,7 @@ clients.
 - [Define and validate models](./models/) shared across the server and client.
 - [Build an HTTP server](./server/) from nested resources and handlers.
 - [Inject services](./dependency-injection/) with singleton or request lifetimes.
-- [Add middleware](./middleware/) for cross-cutting behavior and CORS.
+- [Add middleware](./middleware/) for cross-cutting behavior, CORS, and security headers.
 - [Handle requests](./request-handling/) including bodies, cookies, and streams.
 - [Generate OpenAPI](./openapi/) and serve an interactive API reference.
 - [Call your API](./client/) with Fetch or generate a typed client.

@@ -19,10 +19,15 @@ class DefaultSecurityHeadersResource {
 }
 
 @SecurityHeadersMiddleware({
+  contentSecurityPolicy: "default-src 'self'",
+  strictTransportSecurity: {
+    maxAge: 63072000,
+    includeSubDomains: true,
+    preload: true,
+  },
   headers: {
     "X-Frame-Options": "SAMEORIGIN",
     "Referrer-Policy": false,
-    "Content-Security-Policy": "default-src 'self'",
   },
 })
 @HttpResource("custom-security-headers")
@@ -77,6 +82,10 @@ describe("SecurityHeadersMiddleware", () => {
       response.headers.get("content-security-policy"),
       "default-src 'self'",
     );
+    assert.equal(
+      response.headers.get("strict-transport-security"),
+      "max-age=63072000; includeSubDomains; preload",
+    );
   });
 
   it("validates header names and values at decoration time", () => {
@@ -90,6 +99,16 @@ describe("SecurityHeadersMiddleware", () => {
           headers: { "X-Test": "safe\r\nInjected: yes" },
         }),
       /header: X-Test/,
+    );
+    assert.throws(
+      () =>
+        SecurityHeadersMiddleware({ contentSecurityPolicy: "unsafe\nvalue" }),
+      /Content-Security-Policy/,
+    );
+    assert.throws(
+      () =>
+        SecurityHeadersMiddleware({ strictTransportSecurity: { maxAge: -1 } }),
+      /maxAge/,
     );
   });
 });

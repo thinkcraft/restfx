@@ -1,6 +1,6 @@
 ---
-title: Middleware and CORS
-description: Apply request middleware to resources and configure cross-origin access.
+title: Middleware, CORS, and security headers
+description: Apply request middleware to resources and configure cross-origin access and security headers.
 ---
 
 `@HttpMiddleware(handler)` attaches middleware to a resource and its nested
@@ -81,6 +81,39 @@ implicit `HEAD` and `OPTIONS`; `methods` can override that list. If
 `allowedHeaders` is omitted, requested preflight headers are reflected. The
 middleware adds relevant `Vary` headers. CORS is a browser access policy, not an
 authentication or authorization mechanism.
+
+## Set security headers
+
+Apply `@SecurityHeadersMiddleware()` to a resource to add common security
+headers to its responses:
+
+```ts
+import { HttpResource, SecurityHeadersMiddleware } from "@restfx/server";
+
+@SecurityHeadersMiddleware({
+  contentSecurityPolicy: "default-src 'self'",
+  strictTransportSecurity: {
+    maxAge: 31_536_000,
+    includeSubDomains: true,
+  },
+})
+@HttpResource()
+class ApiResource {
+  // Mount resources here.
+}
+```
+
+By default the middleware sets `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, and
+`Referrer-Policy: strict-origin-when-cross-origin`. It does not enable CSP or
+HSTS unless configured. `contentSecurityPolicy` is the policy string sent in
+`Content-Security-Policy`; tailor it to the application's scripts, styles, and
+other assets. `strictTransportSecurity.maxAge` is in seconds, with optional
+`includeSubDomains` and `preload` directives. Only enable HSTS when HTTPS is
+enforced for the host, and for every subdomain if `includeSubDomains` is set.
+Set either dedicated option to `false` to omit its header. Other headers can be
+added or overridden with `headers`, where `false` disables one of the defaults;
+dedicated CSP and HSTS options take precedence over matching `headers` entries.
 
 For cookie-based browser calls, pair `credentials: "include"` in the client
 with `credentials: true` and an explicit allowed origin on the server. Browser
