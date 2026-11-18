@@ -38,10 +38,26 @@ headers, or an empty body.
 ## Parse and validate bodies
 
 `await context.req.parseBody()` parses a request body once and reuses the
-resulting promise. The default body limit is 1 MiB; pass a byte limit or
-`{ maxBytes }` to change it. Supported content types are JSON and `+json`,
-URL-encoded forms, multipart forms, and `application/octet-stream` (a `Buffer`).
-Form fields are strings; repeated names become arrays. Multipart files have
+resulting promise. The server-wide body limit defaults to 1 MiB and can be
+configured in bytes with `maxRequestBodyBytes`:
+
+```ts
+const server = new HttpServer(ApiResource, {
+  maxRequestBodyBytes: 10 * 1024 * 1024,
+});
+```
+
+An endpoint can set its own limit with the same option on its route decorator,
+replacing the server-wide limit for that route. For example,
+`@HttpPost({ maxRequestBodyBytes: 20 * 1024 * 1024 })` allows up to 20 MiB even
+if the server limit is lower. This active limit applies to automatic model
+parsing, middleware, `parseBody()`, and `streamBody()`. The optional
+`parseBody(maxBytes)` argument or `{ maxBytes }` option can impose a lower limit
+for that call, but cannot raise the active server or route limit.
+
+Supported content types are JSON and `+json`, URL-encoded forms, multipart
+forms, and `application/octet-stream` (a `Buffer`). Form fields are strings;
+repeated names become arrays. Multipart files have
 `{ filename, contentType, data }`, with `data` as a `Buffer`.
 
 Missing or unsupported content types return `415`, malformed or interrupted
@@ -268,10 +284,13 @@ The playground has the complete example, including a `GET /template?name=...`
 route.
 
 For uploads, `context.req.streamBody({ maxBytes })` returns a one-shot Node
-readable stream, defaulting to the same 1 MiB limit. Pipe it directly to storage
-using `node:stream/promises` `pipeline()` to preserve backpressure, and pass
-`context.signal` to cancel work when the client disconnects. The body can be
-consumed only once, either buffered with `parseBody()` or streamed. Limits are
-checked against both `Content-Length` and received bytes. Treat client filenames
-and content types as untrusted; choose storage paths on the server. Multipart
-parsing is buffered and is intended for smaller uploads.
+readable stream, defaulting to the active server or route limit. Configure
+`maxRequestBodyBytes` on the server or route decorator to allow a larger upload;
+the optional `maxBytes` can only make the limit stricter. Pipe the stream
+directly to storage using `node:stream/promises` `pipeline()` to preserve
+backpressure, and pass `context.signal` to cancel work when the client
+disconnects. The body can be consumed only once, either buffered with
+`parseBody()` or streamed. Limits are checked against both `Content-Length` and
+received bytes. Treat client filenames and content types as untrusted; choose
+storage paths on the server. Multipart parsing is buffered and is intended for
+smaller uploads.
