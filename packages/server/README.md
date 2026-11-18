@@ -445,9 +445,20 @@ class PrivateResource {
 
 ## Request bodies
 
-Use `await context.req.parseBody<T>(maxBytes?)`. The default size limit is
-1 MiB; the optional argument overrides it in bytes. The body is parsed once per
-request and the resulting promise is reused.
+Use `await context.req.parseBody<T>(maxBytes?)`. The server-wide default size
+limit is 1 MiB and can be configured with `maxRequestBodyBytes`:
+
+```ts
+const server = new HttpServer(ApiResource, {
+  maxRequestBodyBytes: 10 * 1024 * 1024,
+});
+```
+
+An endpoint can override that limit with the same option on its route decorator,
+for example `@HttpPost({ maxRequestBodyBytes: 20 * 1024 * 1024 })`. The optional
+`parseBody(maxBytes)` argument can impose a lower limit for one call, but cannot
+raise the active server or endpoint limit. The body is parsed once per request
+and the resulting promise is reused.
 
 Supported content types:
 
@@ -697,9 +708,11 @@ UI.
 
 For large uploads, send one binary object per request and consume the raw body
 as a stream instead of using multipart forms. `context.req.streamBody()` returns
-a one-shot Node readable stream; it defaults to the same 1 MiB size limit as
-`parseBody()`. Set `maxBytes` for a larger upload. Pipe it directly to a file,
-socket, or storage client to preserve backpressure:
+a one-shot Node readable stream and defaults to the active server or endpoint
+limit. Configure `maxRequestBodyBytes` on `HttpServer` or the route decorator to
+allow a larger upload. A per-call `maxBytes` can make the limit stricter, but
+cannot raise the active limit. Pipe it directly to a file, socket, or storage
+client to preserve backpressure:
 
 ```ts
 import { createWriteStream } from "node:fs";
@@ -713,7 +726,7 @@ async upload(context: HttpContext) {
   );
 
   await pipeline(
-    context.req.streamBody({ maxBytes: 500 * 1024 * 1024 }),
+    context.req.streamBody(),
     destination,
     { signal: context.signal },
   );

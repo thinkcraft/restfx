@@ -15,12 +15,18 @@ import { HttpStatusCode } from "./HttpStatusCode.js";
 import { HttpHeaderName } from "./HttpHeaderName.js";
 import { HttpRouter } from "./routing/HttpRouter.js";
 import { IocContainer } from "./IocContainer.js";
+import {
+  DEFAULT_MAX_REQUEST_BODY_BYTES,
+  validateMaxRequestBodyBytes,
+} from "./parsing/requestBodyLimits.js";
 
 const requestIdPattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/;
 
 export interface HttpServerOptions {
   /** Options passed to Node's `http.createServer()`. */
   readonly serverOptions?: ServerOptions;
+  /** Maximum request body size in bytes. Defaults to 1 MiB. */
+  readonly maxRequestBodyBytes?: number;
   /** Root service container shared by requests. */
   readonly container?: IocContainer;
   /** Enable the `X-Request-Id` request and response header. Defaults to `true`. */
@@ -70,11 +76,15 @@ export class HttpServer {
   private readonly _onRequest?: HttpServerOptions["onRequest"];
   private readonly _onResponse?: HttpServerOptions["onResponse"];
   private readonly _container: IocContainer;
+  private readonly _maxRequestBodyBytes: number;
   private _closePromise?: Promise<void>;
 
   constructor(rootResource: new () => object, options: HttpServerOptions = {}) {
     this._router = new HttpRouter(rootResource);
     this._container = options.container ?? new IocContainer();
+    this._maxRequestBodyBytes =
+      options.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES;
+    validateMaxRequestBodyBytes(this._maxRequestBodyBytes);
     this._trustProxy = options.trustProxy;
     this._requestIdEnabled = options.requestId ?? true;
     this._errorHandler = options.errorHandler;
@@ -140,6 +150,7 @@ export class HttpServer {
         new HttpRequest(
           req,
           this._trustProxy?.(req.socket.remoteAddress) ?? false,
+          this._maxRequestBodyBytes,
         ),
         response,
         requestId,

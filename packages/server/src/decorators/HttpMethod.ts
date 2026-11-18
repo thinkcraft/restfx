@@ -6,6 +6,7 @@ import type {
   HttpRequestBodyOptions,
   HttpResponseOptions,
 } from "../openapi/types.js";
+import { validateMaxRequestBodyBytes } from "../parsing/requestBodyLimits.js";
 
 export interface HttpRouteOptions extends HttpOperationOptions {
   readonly path?: string;
@@ -13,11 +14,16 @@ export interface HttpRouteOptions extends HttpOperationOptions {
   readonly request?: ModelConstructor;
   readonly response?: HttpResponseModel;
   readonly requestBody?: HttpRequestBodyOptions;
+  /** Maximum request body size in bytes for this endpoint. */
+  readonly maxRequestBodyBytes?: number;
   readonly responses?: Readonly<Record<string, HttpResponseOptions>>;
   readonly operation?: HttpOperationOptions;
 }
 
 export function HttpMethod(method: string, options: HttpRouteOptions = {}) {
+  if (options.maxRequestBodyBytes !== undefined) {
+    validateMaxRequestBodyBytes(options.maxRequestBodyBytes);
+  }
   if (options.body && options.request) {
     throw new TypeError('Use either "body" or "request", not both');
   }
@@ -42,6 +48,7 @@ export function HttpMethod(method: string, options: HttpRouteOptions = {}) {
         ...options.operation,
       },
       requestBody: options.requestBody,
+      maxRequestBodyBytes: options.maxRequestBodyBytes,
       responses: options.responses,
     });
   };

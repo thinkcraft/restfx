@@ -291,6 +291,69 @@ class UploadResource {
   }
 }
 
+async function parseBodyInRootMiddleware(
+  context: HttpContext,
+  next: () => Promise<unknown>,
+) {
+  if (context.req.path === "/middleware-raised") {
+    await context.req.parseBody();
+  }
+  return next();
+}
+
+@HttpMiddleware(parseBodyInRootMiddleware)
+class RequestBodyLimitResource {
+  @HttpPost({ path: "buffered" })
+  async buffered(context: HttpContext) {
+    return context.req.parseBody(100);
+  }
+
+  @HttpPost({ path: "buffered-raised", maxRequestBodyBytes: 16 })
+  async bufferedRaised(context: HttpContext) {
+    return context.req.parseBody(100);
+  }
+
+  @HttpPost({ path: "middleware-raised", maxRequestBodyBytes: 16 })
+  async middlewareRaised(context: HttpContext) {
+    return context.req.parseBody();
+  }
+
+  @HttpPost({
+    path: "modeled-raised",
+    body: CreateUserModel,
+    maxRequestBodyBytes: 128,
+  })
+  async modeledRaised(context: HttpContext) {
+    const body = await context.req.parseBody<CreateUserModel>();
+    return { email: body.email };
+  }
+
+  @HttpPut({ path: "streamed" })
+  async streamed(context: HttpContext) {
+    return this.countStreamBytes(context, 100);
+  }
+
+  @HttpPut({ path: "streamed-raised", maxRequestBodyBytes: 16 })
+  async streamedRaised(context: HttpContext) {
+    return this.countStreamBytes(context, 100);
+  }
+
+  @HttpPut({ path: "streamed-lowered", maxRequestBodyBytes: 2 })
+  async streamedLowered(context: HttpContext) {
+    return this.countStreamBytes(context, 100);
+  }
+
+  private async countStreamBytes(context: HttpContext, maxBytes: number) {
+    let bytes = 0;
+    for await (const chunk of context.req.streamBody({ maxBytes })) {
+      bytes += Buffer.isBuffer(chunk)
+        ? chunk.byteLength
+        : Buffer.byteLength(chunk);
+    }
+    return { bytes };
+  }
+}
+
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -1257,6 +1320,106 @@ describe("HttpServer resource decorators", () => {
     const response = await fetch(`${baseUrl}/missing`);
 
     assert.equal(response.status, 404);
+  });
+});
+
+describe("HttpServer request body size limits", () => {
+  const server = new HttpServer(RequestBodyLimitResource, {
+    maxRequestBodyBytes: 4,
+  });
+  let baseUrl: string;
+
+  before(async () => {
+    const listeningServer = server.listen(0);
+    await once(listeningServer, "listening");
+    const address = listeningServer.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${address.port}`;
+  });
+
+  after(async () => {
+    await server.close();
+  });
+
+  it("applies the server limit to buffered bodies despite a larger per-call limit", async () => {
+    const response = await fetch(`${baseUrl}/buffered`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"x":1}',
+    });
+
+    assert.equal(response.status, 413);
+  });
+
+  it("allows an endpoint to raise the configured limit for buffered bodies", async () => {
+    const response = await fetch(`${baseUrl}/buffered-raised`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"x":1}',
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { x: 1 });
+  });
+
+  it("applies endpoint limits before root middleware consumes the body", async () => {
+    const response = await fetch(`${baseUrl}/middleware-raised`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"x":1}',
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { x: 1 });
+  });
+
+  it("applies endpoint overrides to automatically parsed model bodies", async () => {
+    const response = await fetch(`${baseUrl}/modeled-raised`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "jane@example.com",
+        name: "Jane",
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { email: "jane@example.com" });
+  });
+
+  it("applies the server and endpoint limits to raw streamed bodies", async () => {
+    const globalLimitResponse = await fetch(`${baseUrl}/streamed`, {
+      method: "PUT",
+      body: "12345",
+    });
+    const raisedLimitResponse = await fetch(`${baseUrl}/streamed-raised`, {
+      method: "PUT",
+      body: "12345",
+    });
+    const loweredLimitResponse = await fetch(`${baseUrl}/streamed-lowered`, {
+      method: "PUT",
+      body: "123",
+    });
+
+    assert.equal(globalLimitResponse.status, 413);
+    assert.equal(raisedLimitResponse.status, 200);
+    assert.deepEqual(await raisedLimitResponse.json(), { bytes: 5 });
+    assert.equal(loweredLimitResponse.status, 413);
+  });
+
+  it("rejects invalid server request body limits", () => {
+    assert.throws(
+      () =>
+        new HttpServer(RequestBodyLimitResource, { maxRequestBodyBytes: -1 }),
+      RangeError,
+    );
+    assert.throws(
+      () =>
+        new HttpServer(RequestBodyLimitResource, {
+          maxRequestBodyBytes: Number.POSITIVE_INFINITY,
+        }),
+      RangeError,
+    );
+    assert.throws(() => HttpPost({ maxRequestBodyBytes: -1 }), RangeError);
   });
 });
 

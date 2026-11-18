@@ -13,12 +13,17 @@ import { parseJsonBody } from "./parseJsonBody.js";
 import { parseUrlEncodedBody } from "./parseUrlEncodedBody.js";
 import { getRequestContentLength } from "./getRequestContentLength.js";
 import { getSingleHeader } from "../utils/getSingleHeader.js";
+import {
+  DEFAULT_MAX_REQUEST_BODY_BYTES,
+  validateMaxRequestBodyBytes,
+} from "./requestBodyLimits.js";
 
 export class HttpBodyParser {
-  async parse<T>(req: IncomingMessage, maxBytes = 1_048_576): Promise<T> {
-    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
-      throw new RangeError("maxBytes must be a non-negative safe integer");
-    }
+  async parse<T>(
+    req: IncomingMessage,
+    maxBytes = DEFAULT_MAX_REQUEST_BODY_BYTES,
+  ): Promise<T> {
+    validateMaxRequestBodyBytes(maxBytes, "maxBytes");
 
     const contentLength = getRequestContentLength(req);
     if (contentLength !== undefined && contentLength > maxBytes) {

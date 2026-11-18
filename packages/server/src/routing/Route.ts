@@ -19,6 +19,7 @@ export interface Route {
   readonly responseModel?: HttpResponseModel;
   readonly operation?: HttpOperationOptions;
   readonly requestBody?: HttpRequestBodyOptions;
+  readonly maxRequestBodyBytes?: number;
   readonly responses?: Readonly<Record<string, HttpResponseOptions>>;
 }
 

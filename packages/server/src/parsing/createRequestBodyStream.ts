@@ -3,11 +3,13 @@ import { Transform } from "node:stream";
 import { HttpError } from "../HttpError.js";
 import { HttpStatusCode } from "../HttpStatusCode.js";
 import { getRequestContentLength } from "./getRequestContentLength.js";
-
-const DEFAULT_MAX_BYTES = 1_048_576;
+import {
+  DEFAULT_MAX_REQUEST_BODY_BYTES,
+  validateMaxRequestBodyBytes,
+} from "./requestBodyLimits.js";
 
 export interface HttpRequestBodyStreamOptions {
-  /** Maximum number of bytes accepted from the request body. Defaults to 1 MiB. */
+  /** Maximum number of bytes accepted from the request body. */
   readonly maxBytes?: number;
 }
 
@@ -15,10 +17,8 @@ export function createRequestBodyStream(
   req: IncomingMessage,
   options: HttpRequestBodyStreamOptions = {},
 ) {
-  const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
-  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
-    throw new RangeError("maxBytes must be a non-negative safe integer");
-  }
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES;
+  validateMaxRequestBodyBytes(maxBytes, "maxBytes");
 
   const contentLength = getRequestContentLength(req);
   if (contentLength !== undefined && contentLength > maxBytes) {

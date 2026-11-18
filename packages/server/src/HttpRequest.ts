@@ -19,6 +19,12 @@ import {
 } from "@restfx/core";
 import { getRequestModelMetadata } from "./request/RequestModelMetadata.js";
 import { getSingleHeader } from "./utils/getSingleHeader.js";
+import {
+  DEFAULT_MAX_REQUEST_BODY_BYTES,
+  validateMaxRequestBodyBytes,
+} from "./parsing/requestBodyLimits.js";
+
+const requestBodyLimits = new WeakMap<HttpRequest, number>();
 
 export interface HttpParseBodyOptions<T = unknown> {
   readonly maxBytes?: number;
@@ -60,7 +66,10 @@ export class HttpRequest {
   constructor(
     readonly req: IncomingMessage,
     trustProxy = false,
+    maxRequestBodyBytes = DEFAULT_MAX_REQUEST_BODY_BYTES,
   ) {
+    validateMaxRequestBodyBytes(maxRequestBodyBytes);
+    requestBodyLimits.set(this, maxRequestBodyBytes);
     if (this.req.aborted) {
       this.abortRequest();
     } else {
@@ -149,7 +158,7 @@ export class HttpRequest {
   async parseBody<T>(maxBytes?: number): Promise<T>;
   async parseBody<T>(options?: HttpParseBodyOptions<T>): Promise<T>;
   async parseBody<T>(
-    maxBytesOrOptions: number | HttpParseBodyOptions<T> = 1_048_576,
+    maxBytesOrOptions: number | HttpParseBodyOptions<T> = {},
   ): Promise<T> {
     if (this._bodyMode === "stream") {
       throw new Error("The request body has already been claimed as a stream");
@@ -160,6 +169,13 @@ export class HttpRequest {
       typeof maxBytesOrOptions === "number"
         ? { maxBytes: maxBytesOrOptions }
         : maxBytesOrOptions;
+    if (options.maxBytes !== undefined) {
+      validateMaxRequestBodyBytes(options.maxBytes, "maxBytes");
+    }
+    const maxBytes = Math.min(
+      options.maxBytes ?? this.getMaxRequestBodyBytes(),
+      this.getMaxRequestBodyBytes(),
+    );
     if (options.model) {
       if (this._bodyModel && this._bodyModel !== options.model) {
         throw new Error("The request body already has a different model");
@@ -170,7 +186,7 @@ export class HttpRequest {
     if (this._body === undefined) {
       this._body = (this._bodyParser ??= new HttpBodyParser()).parse<T>(
         this.req,
-        options.maxBytes,
+        maxBytes,
       );
     }
 
@@ -278,15 +294,28 @@ export class HttpRequest {
   }
 
   /**
-   * Returns a one-shot, bounded stream of the raw request body. The default
-   * limit is 1 MiB. Use parseBody() instead for buffered form or JSON payloads.
+   * Returns a one-shot, bounded stream of the raw request body. The server's
+   * configured limit applies unless a lower per-call limit is provided. Use
+   * parseBody() instead for buffered form or JSON payloads.
    */
   streamBody(options: HttpRequestBodyStreamOptions = {}) {
     if (this._bodyMode !== "unused") {
       throw new Error("The request body has already been claimed");
     }
     this._bodyMode = "stream";
-    return createRequestBodyStream(this.req, options);
+    if (options.maxBytes !== undefined) {
+      validateMaxRequestBodyBytes(options.maxBytes, "maxBytes");
+    }
+    return createRequestBodyStream(this.req, {
+      maxBytes: Math.min(
+        options.maxBytes ?? this.getMaxRequestBodyBytes(),
+        this.getMaxRequestBodyBytes(),
+      ),
+    });
+  }
+
+  private getMaxRequestBodyBytes() {
+    return requestBodyLimits.get(this) ?? DEFAULT_MAX_REQUEST_BODY_BYTES;
   }
 
   private readonly abortRequest = () => {
@@ -294,6 +323,12 @@ export class HttpRequest {
     error.name = "AbortError";
     this._abortController.abort(error);
   };
+}
+
+/** @internal Sets the limit selected for a matched route. */
+export function setRequestBodyLimit(request: HttpRequest, maxBytes: number) {
+  validateMaxRequestBodyBytes(maxBytes);
+  requestBodyLimits.set(request, maxBytes);
 }
 
 function hasArrayFieldType(type: Function) {

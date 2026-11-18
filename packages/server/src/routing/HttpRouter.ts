@@ -25,6 +25,7 @@ import {
 } from "@restfx/core";
 import { validateRequestModelRoute } from "../request/validateRequestModelRoute.js";
 import { getInjectedProperties } from "../metadata/InjectionMetadata.js";
+import { setRequestBodyLimit } from "../HttpRequest.js";
 
 /** Discovers decorated resources and dispatches contexts to matching handlers. */
 export class HttpRouter {
@@ -56,6 +57,12 @@ export class HttpRouter {
   }
 
   async dispatch(context: HttpContext): Promise<HttpRouterResult> {
+    const matches = this._routes.match(context.req.path);
+    const match = findRouteMatch(matches, context.req.method);
+    if (match?.route.maxRequestBodyBytes !== undefined) {
+      setRequestBodyLimit(context.req, match.route.maxRequestBodyBytes);
+    }
+
     const rootRequestResources = new Map<object, object>();
     const rootMiddlewares = this._rootMiddlewares.map((middleware) => {
       if (getInjectedProperties(middleware.resource).length === 0) {
@@ -229,6 +236,7 @@ export class HttpRouter {
           responseModel: handlerMetadata.responseModel,
           operation: handlerMetadata.operation,
           requestBody: handlerMetadata.requestBody,
+          maxRequestBodyBytes: handlerMetadata.maxRequestBodyBytes,
           responses: handlerMetadata.responses,
         });
       }
