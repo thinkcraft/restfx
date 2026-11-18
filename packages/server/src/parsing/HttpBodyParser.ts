@@ -48,53 +48,9 @@ export class HttpBodyParser {
       );
     }
 
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
+    const body = await readRequestBody(req, maxBytes, contentLength);
 
-    let oversized = false;
-    try {
-      for await (const chunk of req.iterator({ destroyOnReturn: false })) {
-        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        totalBytes += buffer.length;
-
-        if (totalBytes > maxBytes) {
-          chunks.length = 0;
-          oversized = true;
-          req.pause();
-          break;
-        }
-
-        chunks.push(buffer);
-      }
-    } catch (error) {
-      if (error instanceof HttpError) throw error;
-      throw new HttpError(
-        HttpStatusCode.BadRequest,
-        "Request body was interrupted before it was fully received",
-      );
-    }
-
-    if (oversized) throw this.payloadTooLarge();
-
-    const body =
-      chunks.length === 1 ? chunks[0]! : Buffer.concat(chunks, totalBytes);
-    if (contentLength !== undefined && contentLength !== body.length) {
-      throw new HttpError(
-        HttpStatusCode.BadRequest,
-        "Request body length does not match Content-Length",
-      );
-    }
-
-    switch (bodyFormat) {
-      case "urlencoded":
-        return parseUrlEncodedBody<T>(body);
-      case "binary":
-        return parseBinaryBody<T>(body);
-      case "multipart":
-        return parseMultipartBody(body, multipartBoundary!) as T;
-      case "json":
-        return parseJsonBody<T>(body);
-    }
+    return parseBodyFormat(bodyFormat, body, multipartBoundary) as T;
   }
 
   private payloadTooLarge() {
@@ -135,7 +91,7 @@ export class HttpBodyParser {
     if (mediaType === HttpMediaType.ApplicationOctetStream) return "binary";
     if (mediaType === HttpMediaType.MultipartFormData) return "multipart";
     const applicationPrefix = HttpMediaType.ApplicationJson.split("/")[0] + "/";
-    if (!mediaType?.startsWith(applicationPrefix)) return undefined;
+    if (!mediaType.startsWith(applicationPrefix)) return undefined;
 
     const subtype = mediaType.slice(applicationPrefix.length);
     if (
@@ -146,5 +102,61 @@ export class HttpBodyParser {
     }
 
     return undefined;
+  }
+}
+
+async function readRequestBody(
+  req: IncomingMessage,
+  maxBytes: number,
+  contentLength: number | undefined,
+) {
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  try {
+    for await (const chunk of req.iterator({ destroyOnReturn: false })) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buffer.length;
+      if (totalBytes > maxBytes) {
+        req.pause();
+        throw new HttpError(
+          HttpStatusCode.PayloadTooLarge,
+          "Request body exceeds the maximum allowed size",
+        );
+      }
+      chunks.push(buffer);
+    }
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(
+      HttpStatusCode.BadRequest,
+      "Request body was interrupted before it was fully received",
+    );
+  }
+
+  const body =
+    chunks.length === 1 ? chunks[0]! : Buffer.concat(chunks, totalBytes);
+  if (contentLength !== undefined && contentLength !== body.length) {
+    throw new HttpError(
+      HttpStatusCode.BadRequest,
+      "Request body length does not match Content-Length",
+    );
+  }
+  return body;
+}
+
+function parseBodyFormat(
+  bodyFormat: "urlencoded" | "binary" | "multipart" | "json",
+  body: Buffer,
+  multipartBoundary: string | undefined,
+) {
+  switch (bodyFormat) {
+    case "urlencoded":
+      return parseUrlEncodedBody(body);
+    case "binary":
+      return parseBinaryBody(body);
+    case "multipart":
+      return parseMultipartBody(body, multipartBoundary!);
+    case "json":
+      return parseJsonBody(body);
   }
 }

@@ -46,106 +46,139 @@ export function parseMultipartBody(
   let partCount = 0;
 
   // Multipart permits an optional preamble before its first boundary.
-  let firstBoundary = body.indexOf(marker);
-  while (firstBoundary >= 0) {
-    const isLineStart =
-      firstBoundary === 0 ||
-      (firstBoundary >= 2 &&
-        body.subarray(firstBoundary - 2, firstBoundary).toString() === "\r\n");
-    const suffix = body
-      .subarray(
-        firstBoundary + marker.length,
-        firstBoundary + marker.length + 2,
-      )
-      .toString();
-    if (isLineStart && (suffix === "--" || suffix === "\r\n")) break;
-    firstBoundary = body.indexOf(marker, firstBoundary + 1);
-  }
+  const firstBoundary = findInitialBoundary(body, marker);
   if (firstBoundary < 0) throw invalidMultipart();
   let position = firstBoundary + marker.length;
 
   while (true) {
-    if (body.subarray(position, position + 2).toString() === "--") {
-      const closingSuffix = position + 2;
-      if (
-        closingSuffix !== body.length &&
-        body.subarray(closingSuffix, closingSuffix + 2).toString() !== "\r\n"
-      ) {
-        throw invalidMultipart();
-      }
+    if (isClosingBoundary(body, position)) {
+      validateClosingBoundary(body, position);
       return Object.fromEntries(fields);
     }
     if (body.subarray(position, position + 2).toString() !== "\r\n") {
       throw invalidMultipart();
     }
 
-    const headersStart = position + 2;
-    const headersEnd = body.indexOf(Buffer.from("\r\n\r\n"), headersStart);
-    if (
-      headersEnd < 0 ||
-      headersEnd - headersStart > MAX_MULTIPART_HEADER_BYTES
-    ) {
-      throw invalidMultipart();
-    }
     partCount++;
     if (partCount > MAX_MULTIPART_PARTS) throw invalidMultipart();
-    const headers = parseMultipartHeaders(
-      body.subarray(headersStart, headersEnd).toString("latin1"),
-    );
-    const contentType = headers.get("content-type");
-    if (
-      contentType !== undefined &&
-      !parseHeaderParameters(contentType)?.get("")?.includes("/")
-    ) {
-      throw invalidMultipart();
-    }
-    const disposition = headers.get("content-disposition");
-    const dispositionParameters =
-      disposition === undefined
-        ? undefined
-        : parseHeaderParameters(disposition);
-    if (
-      dispositionParameters?.get("")?.toLowerCase() !== "form-data" ||
-      !dispositionParameters.has("name") ||
-      dispositionParameters.get("name") === "" ||
-      dispositionParameters.get("name")!.length >
-        MAX_MULTIPART_FIELD_NAME_LENGTH ||
-      (dispositionParameters.get("filename")?.length ?? 0) >
-        MAX_MULTIPART_FILENAME_LENGTH
-    ) {
-      throw invalidMultipart();
-    }
+    position = parseMultipartPart(body, position, separator, fields);
+  }
+}
 
-    const dataStart = headersEnd + 4;
-    let boundaryStart = body.indexOf(separator, dataStart);
-    while (boundaryStart >= 0) {
-      const suffixStart = boundaryStart + separator.length;
-      const suffix = body.subarray(suffixStart, suffixStart + 2).toString();
-      if (suffix === "--" || suffix === "\r\n") break;
-      boundaryStart = body.indexOf(separator, boundaryStart + 1);
-    }
-    if (boundaryStart < 0) throw invalidMultipart();
+function findInitialBoundary(body: Buffer, marker: Buffer) {
+  let boundary = body.indexOf(marker);
+  while (boundary >= 0) {
+    const isLineStart =
+      boundary === 0 ||
+      (boundary >= 2 &&
+        body.subarray(boundary - 2, boundary).toString() === "\r\n");
+    const suffix = body
+      .subarray(boundary + marker.length, boundary + marker.length + 2)
+      .toString();
+    if (isLineStart && (suffix === "--" || suffix === "\r\n")) return boundary;
+    boundary = body.indexOf(marker, boundary + 1);
+  }
+  return -1;
+}
 
-    const name = dispositionParameters.get("name")!;
-    const filename = dispositionParameters.get("filename");
-    const value: HttpMultipartValue =
-      filename === undefined
-        ? decodeMultipartField(body.subarray(dataStart, boundaryStart))
-        : {
-            filename,
-            contentType: contentType ?? HttpMediaType.ApplicationOctetStream,
-            data: body.subarray(dataStart, boundaryStart),
-          };
-    const existing = fields.get(name);
-    if (existing === undefined) {
-      fields.set(name, value);
-    } else if (Array.isArray(existing)) {
-      existing.push(value);
-    } else {
-      fields.set(name, [existing, value]);
-    }
+function isClosingBoundary(body: Buffer, position: number) {
+  return body.subarray(position, position + 2).toString() === "--";
+}
 
-    position = boundaryStart + separator.length;
+function validateClosingBoundary(body: Buffer, position: number) {
+  const suffixStart = position + 2;
+  if (
+    suffixStart !== body.length &&
+    body.subarray(suffixStart, suffixStart + 2).toString() !== "\r\n"
+  ) {
+    throw invalidMultipart();
+  }
+}
+
+function parseMultipartPart(
+  body: Buffer,
+  position: number,
+  separator: Buffer,
+  fields: Map<string, HttpMultipartValue | HttpMultipartValue[]>,
+) {
+  const headersStart = position + 2;
+  const headersEnd = body.indexOf(Buffer.from("\r\n\r\n"), headersStart);
+  if (
+    headersEnd < 0 ||
+    headersEnd - headersStart > MAX_MULTIPART_HEADER_BYTES
+  ) {
+    throw invalidMultipart();
+  }
+
+  const headers = parseMultipartHeaders(
+    body.subarray(headersStart, headersEnd).toString("latin1"),
+  );
+  const contentType = headers.get("content-type");
+  if (
+    contentType !== undefined &&
+    !parseHeaderParameters(contentType)?.get("")?.includes("/")
+  ) {
+    throw invalidMultipart();
+  }
+  const disposition = parseHeaderParameters(
+    headers.get("content-disposition") ?? "",
+  );
+  const name = getMultipartFieldName(disposition);
+
+  const dataStart = headersEnd + 4;
+  const boundaryStart = findPartBoundary(body, separator, dataStart);
+  if (boundaryStart < 0) throw invalidMultipart();
+
+  const filename = disposition?.get("filename");
+  const value: HttpMultipartValue =
+    filename === undefined
+      ? decodeMultipartField(body.subarray(dataStart, boundaryStart))
+      : {
+          filename,
+          contentType: contentType ?? HttpMediaType.ApplicationOctetStream,
+          data: body.subarray(dataStart, boundaryStart),
+        };
+  appendMultipartField(fields, name, value);
+  return boundaryStart + separator.length;
+}
+
+function getMultipartFieldName(disposition: Map<string, string> | undefined) {
+  const name = disposition?.get("name");
+  if (
+    disposition?.get("")?.toLowerCase() !== "form-data" ||
+    name === undefined ||
+    name.length === 0 ||
+    name.length > MAX_MULTIPART_FIELD_NAME_LENGTH ||
+    (disposition.get("filename")?.length ?? 0) > MAX_MULTIPART_FILENAME_LENGTH
+  ) {
+    throw invalidMultipart();
+  }
+  return name;
+}
+
+function findPartBoundary(body: Buffer, separator: Buffer, start: number) {
+  let boundary = body.indexOf(separator, start);
+  while (boundary >= 0) {
+    const suffixStart = boundary + separator.length;
+    const suffix = body.subarray(suffixStart, suffixStart + 2).toString();
+    if (suffix === "--" || suffix === "\r\n") return boundary;
+    boundary = body.indexOf(separator, boundary + 1);
+  }
+  return -1;
+}
+
+function appendMultipartField(
+  fields: Map<string, HttpMultipartValue | HttpMultipartValue[]>,
+  name: string,
+  value: HttpMultipartValue,
+) {
+  const existing = fields.get(name);
+  if (existing === undefined) {
+    fields.set(name, value);
+  } else if (Array.isArray(existing)) {
+    existing.push(value);
+  } else {
+    fields.set(name, [existing, value]);
   }
 }
 
@@ -183,6 +216,30 @@ function decodeMultipartField(body: Buffer) {
 }
 
 export function parseHeaderParameters(header: string) {
+  const segments = splitHeaderParameters(header);
+  if (!segments) return undefined;
+
+  const primaryValue = segments[0]?.toLowerCase();
+  if (
+    primaryValue === undefined ||
+    !/^[!#$%&'*+.^_`|~0-9a-z-]+(?:\/[!#$%&'*+.^_`|~0-9a-z-]+)?$/i.test(
+      primaryValue,
+    )
+  ) {
+    return undefined;
+  }
+
+  const parameters = new Map<string, string>();
+  parameters.set("", primaryValue);
+  for (const segment of segments.slice(1)) {
+    const parameter = parseHeaderParameter(segment);
+    if (!parameter || parameters.has(parameter.name)) return undefined;
+    parameters.set(parameter.name, parameter.value);
+  }
+  return parameters;
+}
+
+function splitHeaderParameters(header: string) {
   const segments: string[] = [];
   let segmentStart = 0;
   let quoted = false;
@@ -202,58 +259,53 @@ export function parseHeaderParameters(header: string) {
   }
   if (quoted || escaped) return undefined;
   segments.push(header.slice(segmentStart).trim());
+  return segments;
+}
 
-  const primaryValue = segments[0]?.toLowerCase();
-  if (
-    primaryValue === undefined ||
-    !/^[!#$%&'*+.^_`|~0-9a-z-]+(?:\/[!#$%&'*+.^_`|~0-9a-z-]+)?$/i.test(
-      primaryValue,
-    )
-  ) {
+function parseHeaderParameter(segment: string) {
+  const equals = segment.indexOf("=");
+  if (equals <= 0) return undefined;
+
+  const name = segment.slice(0, equals).trim().toLowerCase();
+  let value = segment.slice(equals + 1).trim();
+  if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name)) return undefined;
+  if (value.startsWith('"')) {
+    const decoded = decodeQuotedParameter(value);
+    if (decoded === undefined) return undefined;
+    value = decoded;
+  } else if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(value)) {
     return undefined;
   }
+  return { name, value };
+}
 
-  const parameters = new Map<string, string>();
-  parameters.set("", primaryValue);
-  for (const segment of segments.slice(1)) {
-    const equals = segment.indexOf("=");
-    if (equals <= 0) return undefined;
-    const name = segment.slice(0, equals).trim().toLowerCase();
-    let value = segment.slice(equals + 1).trim();
-    if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name)) return undefined;
-    if (value.startsWith('"')) {
-      if (!value.endsWith('"') || value.length < 2) return undefined;
-      const quoted = value.slice(1, -1);
-      let decoded = "";
-      for (let index = 0; index < quoted.length; index++) {
-        const char = quoted[index]!;
-        if (char === "\\") {
-          index++;
-          const escaped = quoted[index];
-          if (
-            escaped === undefined ||
-            /[\u0000-\u0008\u000a-\u001f\u007f]/.test(escaped)
-          ) {
-            return undefined;
-          }
-          decoded += escaped;
-        } else if (
-          char === '"' ||
-          /[\u0000-\u0008\u000a-\u001f\u007f]/.test(char)
-        ) {
-          return undefined;
-        } else {
-          decoded += char;
-        }
+function decodeQuotedParameter(value: string) {
+  if (!value.endsWith('"') || value.length < 2) return undefined;
+
+  const quoted = value.slice(1, -1);
+  let decoded = "";
+  for (let index = 0; index < quoted.length; index++) {
+    const char = quoted[index]!;
+    if (char === "\\") {
+      index++;
+      const escaped = quoted[index];
+      if (
+        escaped === undefined ||
+        /[\u0000-\u0008\u000a-\u001f\u007f]/.test(escaped)
+      ) {
+        return undefined;
       }
-      value = decoded;
-    } else if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(value)) {
+      decoded += escaped;
+    } else if (
+      char === '"' ||
+      /[\u0000-\u0008\u000a-\u001f\u007f]/.test(char)
+    ) {
       return undefined;
+    } else {
+      decoded += char;
     }
-    if (parameters.has(name)) return undefined;
-    parameters.set(name, value);
   }
-  return parameters;
+  return decoded;
 }
 
 function invalidMultipart() {

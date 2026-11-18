@@ -36,6 +36,15 @@ export function validateModelOptions(options: ModelOptions<any>) {
 }
 
 export function validateFieldOptions(options: FieldOptions) {
+  validateFieldTypeOptions(options);
+  validateSourceName(options);
+  validateFieldOptionTypes(options);
+  validateNumericFieldOptions(options);
+  validateFieldOptionRanges(options);
+  validateFieldDefault(options);
+}
+
+function validateFieldTypeOptions(options: FieldOptions) {
   if (options.source === "body") {
     if (typeof options.model !== "function") {
       throw new TypeError('@Field with source "body" requires a model');
@@ -55,13 +64,18 @@ export function validateFieldOptions(options: FieldOptions) {
   ) {
     throw new TypeError("@Field requires a field type constructor");
   }
+}
+
+function validateSourceName(options: FieldOptions) {
   if (options.sourceName !== undefined && options.source === undefined) {
     throw new TypeError("sourceName requires a path, query, or header source");
   }
   if (options.sourceName !== undefined && options.sourceName.trim() === "") {
     throw new TypeError("sourceName must not be empty");
   }
+}
 
+function validateFieldOptionTypes(options: FieldOptions) {
   if (options.pattern !== undefined && !(options.pattern instanceof RegExp)) {
     throw new TypeError("pattern must be a RegExp");
   }
@@ -76,7 +90,9 @@ export function validateFieldOptions(options: FieldOptions) {
       throw new TypeError(`${name} must be a boolean`);
     }
   }
+}
 
+function validateNumericFieldOptions(options: FieldOptions) {
   for (const [name, value] of Object.entries(options)) {
     if (
       ["minLength", "maxLength", "minItems", "maxItems"].includes(name) &&
@@ -93,7 +109,9 @@ export function validateFieldOptions(options: FieldOptions) {
       throw new RangeError(`${name} must be a finite number`);
     }
   }
+}
 
+function validateFieldOptionRanges(options: FieldOptions) {
   if (
     options.minLength !== undefined &&
     options.maxLength !== undefined &&
@@ -115,7 +133,9 @@ export function validateFieldOptions(options: FieldOptions) {
   ) {
     throw new RangeError("minItems cannot be greater than maxItems");
   }
+}
 
+function validateFieldDefault(options: FieldOptions) {
   if (
     options.model &&
     Object.hasOwn(options, "default") &&
@@ -158,57 +178,78 @@ export function validateConstraints(
   path: string,
   issues: ValidationIssue[],
 ) {
-  if (typeof value === "string") {
-    if (field.minLength !== undefined && value.length < field.minLength) {
-      issues.push({
-        path,
-        message: `Must contain at least ${field.minLength} characters`,
-      });
-    }
-    if (field.maxLength !== undefined && value.length > field.maxLength) {
-      issues.push({
-        path,
-        message: `Must contain at most ${field.maxLength} characters`,
-      });
-    }
-    if (field.pattern) {
-      field.pattern.lastIndex = 0;
-      const matches = field.pattern.test(value);
-      field.pattern.lastIndex = 0;
-      if (!matches) {
-        issues.push({ path, message: "Does not match the required pattern" });
-      }
-    }
-  }
+  if (typeof value === "string")
+    validateStringConstraints(value, field, path, issues);
+  if (typeof value === "number")
+    validateNumberConstraints(value, field, path, issues);
+  if (Array.isArray(value))
+    validateArrayConstraints(value, field, path, issues);
+}
 
-  if (typeof value === "number") {
-    if (field.minimum !== undefined && value < field.minimum) {
-      issues.push({ path, message: `Must be at least ${field.minimum}` });
-    }
-    if (field.maximum !== undefined && value > field.maximum) {
-      issues.push({ path, message: `Must be at most ${field.maximum}` });
-    }
+function validateStringConstraints(
+  value: string,
+  field: ModelFieldMetadata,
+  path: string,
+  issues: ValidationIssue[],
+) {
+  if (field.minLength !== undefined && value.length < field.minLength) {
+    issues.push({
+      path,
+      message: `Must contain at least ${field.minLength} characters`,
+    });
   }
+  if (field.maxLength !== undefined && value.length > field.maxLength) {
+    issues.push({
+      path,
+      message: `Must contain at most ${field.maxLength} characters`,
+    });
+  }
+  if (field.pattern) {
+    field.pattern.lastIndex = 0;
+    const matches = field.pattern.test(value);
+    field.pattern.lastIndex = 0;
+    if (!matches)
+      issues.push({ path, message: "Does not match the required pattern" });
+  }
+}
 
-  if (Array.isArray(value)) {
-    if (field.minItems !== undefined && value.length < field.minItems) {
-      issues.push({
-        path,
-        message: `Must contain at least ${field.minItems} items`,
-      });
-    }
-    if (field.maxItems !== undefined && value.length > field.maxItems) {
-      issues.push({
-        path,
-        message: `Must contain at most ${field.maxItems} items`,
-      });
-    }
-    if (
-      field.uniqueItems &&
-      new Set(value.map(stableKey)).size !== value.length
-    ) {
-      issues.push({ path, message: "Items must be unique" });
-    }
+function validateNumberConstraints(
+  value: number,
+  field: ModelFieldMetadata,
+  path: string,
+  issues: ValidationIssue[],
+) {
+  if (field.minimum !== undefined && value < field.minimum) {
+    issues.push({ path, message: `Must be at least ${field.minimum}` });
+  }
+  if (field.maximum !== undefined && value > field.maximum) {
+    issues.push({ path, message: `Must be at most ${field.maximum}` });
+  }
+}
+
+function validateArrayConstraints(
+  value: unknown[],
+  field: ModelFieldMetadata,
+  path: string,
+  issues: ValidationIssue[],
+) {
+  if (field.minItems !== undefined && value.length < field.minItems) {
+    issues.push({
+      path,
+      message: `Must contain at least ${field.minItems} items`,
+    });
+  }
+  if (field.maxItems !== undefined && value.length > field.maxItems) {
+    issues.push({
+      path,
+      message: `Must contain at most ${field.maxItems} items`,
+    });
+  }
+  if (
+    field.uniqueItems &&
+    new Set(value.map(stableKey)).size !== value.length
+  ) {
+    issues.push({ path, message: "Items must be unique" });
   }
 }
 

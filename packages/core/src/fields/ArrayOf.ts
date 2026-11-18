@@ -24,18 +24,10 @@ export function ArrayOf<T>(
         ? undefined
         : new (itemType as FieldTypeConstructor<T>)();
       for (let index = 0; index < value.length; index++) {
-        if (itemModel) {
-          try {
-            validateModel(value[index], itemModel);
-          } catch (error) {
-            if (!(error instanceof ModelValidationError)) throw error;
-            const issue = error.issues[0];
-            return `Item ${index}: ${issue?.path ? `${issue.path}: ` : ""}${issue?.message ?? "Invalid item"}`;
-          }
-        } else {
-          const error = validator!.validate(value[index]);
-          if (error !== undefined) return `Item ${index}: ${error}`;
-        }
+        const error = itemModel
+          ? validateModelArrayItem(value[index], itemModel)
+          : validator!.validate(value[index]);
+        if (error !== undefined) return `Item ${index}: ${error}`;
       }
       return undefined;
     }
@@ -59,4 +51,15 @@ export function ArrayOf<T>(
     ...(itemModel ? { itemModel: { value: itemModel } } : {}),
   });
   return ArrayField;
+}
+
+function validateModelArrayItem(value: unknown, model: ModelConstructor) {
+  try {
+    validateModel(value, model);
+  } catch (error) {
+    if (!(error instanceof ModelValidationError)) throw error;
+    const issue = error.issues[0];
+    return `${issue?.path ? `${issue.path}: ` : ""}${issue?.message ?? "Invalid item"}`;
+  }
+  return undefined;
 }

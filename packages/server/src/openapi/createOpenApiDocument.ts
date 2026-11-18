@@ -41,70 +41,7 @@ export function createOpenApiDocument(
   validateOpenApiOptions(options);
 
   const modelNames = createModelNames(routes);
-  const paths: Record<string, Record<string, unknown>> = {};
-  const operationIds = new Set<string>();
-  const methodNameCounts = new Map<string, number>();
-  const explicitOperationIds = new Set(
-    routes
-      .map((route) => route.operation?.operationId)
-      .filter(
-        (operationId): operationId is string => operationId !== undefined,
-      ),
-  );
-  for (const route of routes) {
-    if (route.operation?.operationId !== undefined) continue;
-    const methodName = getRouteMethodName(route);
-    if (methodName) {
-      methodNameCounts.set(
-        methodName,
-        (methodNameCounts.get(methodName) ?? 0) + 1,
-      );
-    }
-  }
-  for (const route of routes) {
-    const method = route.method.toLowerCase();
-    if (!supportedMethods.has(method)) {
-      throw new TypeError(
-        `OpenAPI does not support the HTTP method ${route.method}`,
-      );
-    }
-
-    const expandedPaths = expandOptionalPath(route.path);
-    for (const [pathIndex, path] of expandedPaths.entries()) {
-      const pathItem = (paths[path] ??= {});
-      if (pathItem[method]) {
-        throw new TypeError(
-          `Multiple routes map to the OpenAPI operation ${method.toUpperCase()} ${path}`,
-        );
-      }
-      const methodName = getRouteMethodName(route);
-      const defaultOperationId =
-        methodName &&
-        methodNameCounts.get(methodName) === 1 &&
-        !explicitOperationIds.has(methodName)
-          ? methodName
-          : undefined;
-      const operation = createOperation(
-        route,
-        path,
-        modelNames,
-        options,
-        defaultOperationId,
-      );
-      const originalOperationId = (operation as { operationId?: string })
-        .operationId;
-      const optionalParameter = getOptionalRouteParameterName(route.path);
-      if (originalOperationId && optionalParameter) {
-        operation.operationId = `${originalOperationId}${pathIndex === 0 ? "Without" : "With"}${capitalize(optionalParameter)}`;
-      }
-      const operationId = (operation as { operationId?: string }).operationId;
-      if (operationId && operationIds.has(operationId)) {
-        throw new TypeError(`Duplicate OpenAPI operationId: ${operationId}`);
-      }
-      if (operationId) operationIds.add(operationId);
-      pathItem[method] = operation;
-    }
-  }
+  const paths = createPaths(routes, modelNames, options);
 
   const schemas: Record<string, OpenApiSchema> = {};
   for (const [model, name] of modelNames) {
@@ -165,6 +102,106 @@ export function createOpenApiDocument(
   return document as OpenApiDocument;
 }
 
+function createPaths(
+  routes: readonly Route[],
+  modelNames: Map<ModelConstructor, string>,
+  options: OpenApiOptions,
+) {
+  const paths: Record<string, Record<string, unknown>> = {};
+  const operationIds = new Set<string>();
+  const { methodNameCounts, explicitOperationIds } =
+    getOperationIdDefaults(routes);
+
+  for (const route of routes) {
+    const method = route.method.toLowerCase();
+    if (!supportedMethods.has(method)) {
+      throw new TypeError(
+        `OpenAPI does not support the HTTP method ${route.method}`,
+      );
+    }
+    const methodName = getRouteMethodName(route);
+    const defaultOperationId =
+      methodName &&
+      methodNameCounts.get(methodName) === 1 &&
+      !explicitOperationIds.has(methodName)
+        ? methodName
+        : undefined;
+    for (const [pathIndex, path] of expandOptionalPath(route.path).entries()) {
+      addOpenApiOperation(
+        route,
+        path,
+        pathIndex,
+        method,
+        modelNames,
+        options,
+        paths,
+        operationIds,
+        defaultOperationId,
+      );
+    }
+  }
+  return paths;
+}
+
+function getOperationIdDefaults(routes: readonly Route[]) {
+  const methodNameCounts = new Map<string, number>();
+  const explicitOperationIds = new Set(
+    routes
+      .map((route) => route.operation?.operationId)
+      .filter(
+        (operationId): operationId is string => operationId !== undefined,
+      ),
+  );
+  for (const route of routes) {
+    if (route.operation?.operationId !== undefined) continue;
+    const methodName = getRouteMethodName(route);
+    if (methodName)
+      methodNameCounts.set(
+        methodName,
+        (methodNameCounts.get(methodName) ?? 0) + 1,
+      );
+  }
+  return { methodNameCounts, explicitOperationIds };
+}
+
+function addOpenApiOperation(
+  route: Route,
+  path: string,
+  pathIndex: number,
+  method: string,
+  modelNames: Map<ModelConstructor, string>,
+  options: OpenApiOptions,
+  paths: Record<string, Record<string, unknown>>,
+  operationIds: Set<string>,
+  defaultOperationId: string | undefined,
+) {
+  const pathItem = (paths[path] ??= {});
+  if (pathItem[method]) {
+    throw new TypeError(
+      `Multiple routes map to the OpenAPI operation ${method.toUpperCase()} ${path}`,
+    );
+  }
+  const operation = createOperation(
+    route,
+    path,
+    modelNames,
+    options,
+    defaultOperationId,
+  );
+  const originalOperationId = (operation as { operationId?: string })
+    .operationId;
+  const optionalParameter = getOptionalRouteParameterName(route.path);
+  if (originalOperationId && optionalParameter) {
+    operation.operationId = `${originalOperationId}${pathIndex === 0 ? "Without" : "With"}${capitalize(optionalParameter)}`;
+  }
+  const operationId = (operation as { operationId?: string }).operationId;
+  if (operationId && operationIds.has(operationId)) {
+    throw new TypeError(`Duplicate OpenAPI operationId: ${operationId}`);
+  }
+  if (operationId) operationIds.add(operationId);
+  pathItem[method] = operation;
+}
+
 function createOperation(
   route: Route,
   path: string,
@@ -173,6 +210,28 @@ function createOperation(
   defaultOperationId?: string,
 ) {
   const operation = route.operation ?? {};
+  const parameterMap = createParameterMap(route, path, modelNames, operation);
+  const responses = createOperationResponses(route, modelNames);
+  const result: Record<string, unknown> = { ...operation, responses };
+  addClientMetadata(result, route, modelNames);
+  if (result.operationId === undefined && defaultOperationId) {
+    result.operationId = defaultOperationId;
+  }
+  delete result.parameters;
+  if (parameterMap.size > 0) result.parameters = [...parameterMap.values()];
+  addRequestBody(result, route, modelNames);
+  if (operation.security === undefined && options.security !== undefined) {
+    result.security = options.security;
+  }
+  return result;
+}
+
+function createParameterMap(
+  route: Route,
+  path: string,
+  modelNames: Map<ModelConstructor, string>,
+  operation: Record<string, any>,
+) {
   const inferredPathParameters = getPathParameterNames(path).map((name) => ({
     name,
     in: "path",
@@ -207,7 +266,13 @@ function createOperation(
       required: parameter.in === "path" ? true : (parameter.required ?? false),
     });
   }
+  return parameterMap;
+}
 
+function createOperationResponses(
+  route: Route,
+  modelNames: Map<ModelConstructor, string>,
+) {
   const responses: Record<string, unknown> = {};
   for (const [status, response] of Object.entries(route.responses ?? {})) {
     validateResponseStatus(status);
@@ -233,6 +298,25 @@ function createOperation(
       }
     }
   }
+  addValidationErrorResponse(route, responses);
+  addBodyErrorResponses(route, responses);
+  if (!responses["500"]) {
+    responses["500"] = {
+      description: "Internal Server Error",
+      content: {
+        "application/json": {
+          schema: { $ref: "#/components/schemas/HttpErrorResponse" },
+        },
+      },
+    };
+  }
+  return responses;
+}
+
+function addValidationErrorResponse(
+  route: Route,
+  responses: Record<string, unknown>,
+) {
   if ((route.bodyModel || route.requestModel) && !responses["422"]) {
     responses["422"] = {
       description: route.bodyModel
@@ -245,6 +329,12 @@ function createOperation(
       },
     };
   }
+}
+
+function addBodyErrorResponses(
+  route: Route,
+  responses: Record<string, unknown>,
+) {
   if (getRouteBodyModel(route)) {
     for (const [status, description] of [
       ["400", "The request body is malformed"],
@@ -263,21 +353,13 @@ function createOperation(
       }
     }
   }
-  if (!responses["500"]) {
-    responses["500"] = {
-      description: "Internal Server Error",
-      content: {
-        "application/json": {
-          schema: { $ref: "#/components/schemas/HttpErrorResponse" },
-        },
-      },
-    };
-  }
+}
 
-  const result: Record<string, unknown> = {
-    ...operation,
-    responses,
-  };
+function addClientMetadata(
+  result: Record<string, unknown>,
+  route: Route,
+  modelNames: Map<ModelConstructor, string>,
+) {
   const requestMetadata = route.requestModel
     ? getRequestModelMetadata(route.requestModel)
     : undefined;
@@ -307,10 +389,13 @@ function createOperation(
         }
       : {}),
   };
-  if (result.operationId === undefined && defaultOperationId)
-    result.operationId = defaultOperationId;
-  delete result.parameters;
-  if (parameterMap.size > 0) result.parameters = [...parameterMap.values()];
+}
+
+function addRequestBody(
+  result: Record<string, unknown>,
+  route: Route,
+  modelNames: Map<ModelConstructor, string>,
+) {
   const requestBodyModel = getRouteBodyModel(route);
   const requestModelBodyOptions = route.requestModel
     ? getRequestModelMetadata(route.requestModel).body?.bodyOptions
@@ -337,10 +422,6 @@ function createOperation(
       },
     };
   }
-  if (operation.security === undefined && options.security !== undefined) {
-    result.security = options.security;
-  }
-  return result;
 }
 
 function getRouteMethodName(route: Route) {
@@ -435,42 +516,66 @@ function createResponse(
 }
 
 function createModelNames(routes: readonly Route[]) {
+  const models = collectModels(routes);
+  return assignModelNames(routes, models);
+}
+
+function collectModels(routes: readonly Route[]) {
   const models: ModelConstructor[] = [];
   const queued = new Set<ModelConstructor>();
   const addModel = (model: ModelConstructor) => {
-    if (!queued.has(model)) {
-      queued.add(model);
-      models.push(model);
-    }
+    if (queued.has(model)) return;
+    queued.add(model);
+    models.push(model);
   };
   for (const route of routes) {
-    if (route.bodyModel) addModel(route.bodyModel);
-    if (route.requestModel) {
-      addModel(route.requestModel);
-      const body = getRequestModelMetadata(route.requestModel).body;
-      if (body?.model) addModel(body.model);
-    }
-    if (route.responseModel) {
-      addModel(
-        typeof route.responseModel === "function"
-          ? route.responseModel
-          : route.responseModel.arrayOf,
-      );
-    }
-    for (const response of Object.values(route.responses ?? {})) {
-      if (response.model) addModel(response.model);
-    }
+    addRouteModels(route, addModel);
   }
-
   for (let index = 0; index < models.length; index++) {
-    const metadata = getModelMetadata(models[index]!);
-    if (!metadata) continue;
-    for (const field of metadata.fields.values()) {
-      if (field.model) addModel(field.model);
-      for (const model of getModelsFromFieldType(field.type)) addModel(model);
-    }
+    addModelDependencies(models[index]!, addModel);
   }
+  return models;
+}
 
+function addRouteModels(
+  route: Route,
+  addModel: (model: ModelConstructor) => void,
+) {
+  if (route.bodyModel) addModel(route.bodyModel);
+  if (route.requestModel) {
+    addModel(route.requestModel);
+    const body = getRequestModelMetadata(route.requestModel).body;
+    if (body?.model) addModel(body.model);
+  }
+  if (route.responseModel) {
+    addModel(
+      typeof route.responseModel === "function"
+        ? route.responseModel
+        : route.responseModel.arrayOf,
+    );
+  }
+  for (const response of Object.values(route.responses ?? {})) {
+    if (response.model) addModel(response.model);
+  }
+}
+
+function addModelDependencies(
+  model: ModelConstructor,
+  addModel: (model: ModelConstructor) => void,
+) {
+  const metadata = getModelMetadata(model);
+  if (!metadata) return;
+  for (const field of metadata.fields.values()) {
+    if (field.model) addModel(field.model);
+    for (const dependency of getModelsFromFieldType(field.type))
+      addModel(dependency);
+  }
+}
+
+function assignModelNames(
+  routes: readonly Route[],
+  models: ModelConstructor[],
+) {
   const names = new Map<ModelConstructor, string>();
   const used = new Set<string>(
     routes.length === 0
@@ -584,6 +689,16 @@ function createFieldSchema(
         ? getFieldTypeSchema(field.type, modelNames)
         : {};
 
+  addFieldConstraints(base, field);
+  const annotations = getFieldAnnotations(field);
+  if (!field.nullable) return { ...base, ...annotations };
+  return { ...annotations, anyOf: [base, { type: "null" }] };
+}
+
+function addFieldConstraints(
+  base: Record<string, unknown>,
+  field: ModelFieldMetadata,
+) {
   if (field.minLength !== undefined) base.minLength = field.minLength;
   if (field.maxLength !== undefined) base.maxLength = field.maxLength;
   if (field.minimum !== undefined) base.minimum = field.minimum;
@@ -592,16 +707,16 @@ function createFieldSchema(
   if (field.minItems !== undefined) base.minItems = field.minItems;
   if (field.maxItems !== undefined) base.maxItems = field.maxItems;
   if (field.uniqueItems !== undefined) base.uniqueItems = field.uniqueItems;
+}
 
+function getFieldAnnotations(field: ModelFieldMetadata) {
   const annotations: Record<string, unknown> = {};
   if (field.description !== undefined)
     annotations.description = field.description;
   if (field.examples !== undefined) annotations.examples = field.examples;
   if (field.deprecated !== undefined) annotations.deprecated = field.deprecated;
   if (field.default !== undefined) annotations.default = field.default;
-
-  if (!field.nullable) return { ...base, ...annotations };
-  return { ...annotations, anyOf: [base, { type: "null" }] };
+  return annotations;
 }
 
 function getFieldTypeSchema(
@@ -614,43 +729,21 @@ function getFieldTypeSchema(
       readonly modelMapping?: Readonly<Record<string, ModelConstructor>>;
     }
   ).modelMapping;
-  if (modelMapping) {
-    const discriminator = (
-      type as typeof type & { readonly discriminator: string }
-    ).discriminator;
-    const mapping = Object.fromEntries(
-      Object.entries(modelMapping).map(([tag, model]) => [
-        tag,
-        `#/components/schemas/${modelNames.get(model)!}`,
-      ]),
-    );
-    return {
-      oneOf: Object.values(mapping).map(($ref) => ({ $ref })),
-      discriminator: { propertyName: discriminator, mapping },
-    };
-  }
+  if (modelMapping)
+    return getModelMappingSchema(type, modelMapping, modelNames);
 
   const unionTypes = (
     type as typeof type & { readonly unionTypes?: readonly (typeof type)[] }
   ).unionTypes;
-  if (unionTypes) {
+  if (unionTypes)
     return {
       anyOf: unionTypes.map((part) => getFieldTypeSchema(part, modelNames)),
     };
-  }
 
   const enumValues = (
     type as typeof type & { readonly enumValues?: readonly unknown[] }
   ).enumValues;
-  if (enumValues) {
-    const valueTypes = new Set(enumValues.map((value) => typeof value));
-    const schemaType =
-      valueTypes.size === 1 ? primitiveEnumType(enumValues[0]) : undefined;
-    return {
-      ...(schemaType ? { type: schemaType } : {}),
-      enum: [...enumValues],
-    };
-  }
+  if (enumValues) return getEnumSchema(enumValues);
 
   if (
     type === StringField ||
@@ -660,17 +753,7 @@ function getFieldTypeSchema(
     type === TimeField ||
     type.prototype instanceof StringField
   ) {
-    const schema: Record<string, unknown> = { type: "string" };
-    if (type === DateField || type.prototype instanceof DateField)
-      schema.format = "date";
-    if (type === DateTimeField || type.prototype instanceof DateTimeField)
-      schema.format = "date-time";
-    if (type === TimeField || type.prototype instanceof TimeField)
-      schema.format = "time";
-    if (type === Email || type.prototype instanceof Email)
-      schema.format = "email";
-    if (type === UUID || type.prototype instanceof UUID) schema.format = "uuid";
-    return schema;
+    return getStringFieldSchema(type);
   }
   if (type === IntegerField) return { type: "integer" };
   if (type === NumberField) return { type: "number" };
@@ -694,6 +777,46 @@ function getFieldTypeSchema(
   return itemType
     ? { type: "array", items: getFieldTypeSchema(itemType, modelNames) }
     : {};
+}
+
+function getModelMappingSchema(
+  type: Function,
+  modelMapping: Readonly<Record<string, ModelConstructor>>,
+  modelNames: Map<ModelConstructor, string>,
+) {
+  const discriminator = (type as Function & { readonly discriminator: string })
+    .discriminator;
+  const mapping = Object.fromEntries(
+    Object.entries(modelMapping).map(([tag, model]) => [
+      tag,
+      `#/components/schemas/${modelNames.get(model)!}`,
+    ]),
+  );
+  return {
+    oneOf: Object.values(mapping).map(($ref) => ({ $ref })),
+    discriminator: { propertyName: discriminator, mapping },
+  };
+}
+
+function getEnumSchema(enumValues: readonly unknown[]) {
+  const valueTypes = new Set(enumValues.map((value) => typeof value));
+  const schemaType =
+    valueTypes.size === 1 ? primitiveEnumType(enumValues[0]) : undefined;
+  return { ...(schemaType ? { type: schemaType } : {}), enum: [...enumValues] };
+}
+
+function getStringFieldSchema(type: Function) {
+  const schema: Record<string, unknown> = { type: "string" };
+  if (type === DateField || type.prototype instanceof DateField)
+    schema.format = "date";
+  if (type === DateTimeField || type.prototype instanceof DateTimeField)
+    schema.format = "date-time";
+  if (type === TimeField || type.prototype instanceof TimeField)
+    schema.format = "time";
+  if (type === Email || type.prototype instanceof Email)
+    schema.format = "email";
+  if (type === UUID || type.prototype instanceof UUID) schema.format = "uuid";
+  return schema;
 }
 
 function primitiveEnumType(value: unknown) {

@@ -149,50 +149,13 @@ export class HttpServer {
       this.notify(this._onRequest, context);
       const result = await this._router.dispatch(context);
       if (!result.matched) {
-        if (result.status === HttpStatusCode.MethodNotAllowed) {
-          response.setHeader(
-            HttpHeaderName.Allow,
-            result.allowedMethods.join(", "),
-          );
-          await response.send(
-            new HttpResult(
-              HttpStatusCode.MethodNotAllowed,
-              "Method Not Allowed",
-            ),
-            req.method === "HEAD",
-          );
-        } else {
-          await response.send(
-            new HttpResult(HttpStatusCode.NotFound, "Not Found"),
-            req.method === "HEAD",
-          );
-        }
+        await this.sendUnmatchedResponse(result, req, response);
         return;
       }
 
       await response.send(result.value, req.method === "HEAD");
     } catch (error) {
-      this.notifyError(error, context);
-      if (req.aborted || res.destroyed || res.writableEnded) return;
-      if (res.headersSent) {
-        res.destroy(error instanceof Error ? error : undefined);
-        return;
-      }
-
-      this.closeIncompleteRequest(req, res);
-      let result: HttpResult;
-      if (this._errorHandler) {
-        try {
-          result = await this._errorHandler(error, context);
-        } catch (handlerError) {
-          this.notifyError(handlerError, context);
-          result = this.createInternalServerError();
-        }
-      } else {
-        result = this.createDefaultErrorResult(error);
-      }
-
-      await response.send(result, req.method === "HEAD");
+      await this.handleRequestError(error, context, req, res, response);
     } finally {
       if (context) {
         this.notify(this._onResponse, context, {
@@ -201,6 +164,61 @@ export class HttpServer {
           completed: res.writableEnded,
         });
       }
+    }
+  }
+
+  private async sendUnmatchedResponse(
+    result: Extract<
+      Awaited<ReturnType<HttpRouter["dispatch"]>>,
+      { matched: false }
+    >,
+    req: IncomingMessage,
+    response: HttpResponse,
+  ) {
+    const headRequest = req.method === "HEAD";
+    if (result.status === HttpStatusCode.MethodNotAllowed) {
+      response.setHeader(
+        HttpHeaderName.Allow,
+        result.allowedMethods.join(", "),
+      );
+      await response.send(
+        new HttpResult(HttpStatusCode.MethodNotAllowed, "Method Not Allowed"),
+        headRequest,
+      );
+      return;
+    }
+    await response.send(
+      new HttpResult(HttpStatusCode.NotFound, "Not Found"),
+      headRequest,
+    );
+  }
+
+  private async handleRequestError(
+    error: unknown,
+    context: HttpContext | undefined,
+    req: IncomingMessage,
+    res: ServerResponse,
+    response: HttpResponse,
+  ) {
+    this.notifyError(error, context);
+    if (req.aborted || res.destroyed || res.writableEnded) return;
+    if (res.headersSent) {
+      res.destroy(error instanceof Error ? error : undefined);
+      return;
+    }
+
+    this.closeIncompleteRequest(req, res);
+    const result = await this.createErrorResult(error, context);
+    await response.send(result, req.method === "HEAD");
+  }
+
+  private async createErrorResult(error: unknown, context?: HttpContext) {
+    if (!this._errorHandler) return this.createDefaultErrorResult(error);
+    try {
+      return await this._errorHandler(error, context);
+    } catch (handlerError) {
+      this.notifyError(handlerError, context);
+      return this.createInternalServerError();
     }
   }
 

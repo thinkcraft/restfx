@@ -111,44 +111,45 @@ export class HttpCookies {
         : [this.requestCookieHeader];
 
     for (const header of headers) {
-      for (const part of header.split(";")) {
-        const cookie = part.trim();
-        if (cookie === "") continue;
-
-        const separator = cookie.indexOf("=");
-        if (separator <= 0) throw malformedCookieHeader();
-
-        const name = cookie.slice(0, separator).trim();
-        if (!cookieNamePattern.test(name)) throw malformedCookieHeader();
-
-        let value = cookie.slice(separator + 1).trim();
-        if (value.startsWith('"') || value.endsWith('"')) {
-          if (
-            value.length < 2 ||
-            !value.startsWith('"') ||
-            !value.endsWith('"')
-          ) {
-            throw malformedCookieHeader();
-          }
-          value = value.slice(1, -1);
-        }
-        if (!cookieValuePattern.test(value)) throw malformedCookieHeader();
-
-        let decodedValue: string;
-        try {
-          decodedValue = decodeURIComponent(value);
-        } catch {
-          throw malformedCookieHeader();
-        }
-
-        const values = cookies.get(name);
-        if (values) values.push(decodedValue);
-        else cookies.set(name, [decodedValue]);
-      }
+      parseCookieHeader(header, cookies);
     }
 
     this._parsed = cookies;
     return cookies;
+  }
+}
+
+function parseCookieHeader(header: string, cookies: Map<string, string[]>) {
+  for (const part of header.split(";")) {
+    const cookie = part.trim();
+    if (cookie === "") continue;
+    const [name, value] = parseCookie(cookie);
+    const values = cookies.get(name);
+    if (values) values.push(value);
+    else cookies.set(name, [value]);
+  }
+}
+
+function parseCookie(cookie: string): [string, string] {
+  const separator = cookie.indexOf("=");
+  if (separator <= 0) throw malformedCookieHeader();
+
+  const name = cookie.slice(0, separator).trim();
+  if (!cookieNamePattern.test(name)) throw malformedCookieHeader();
+
+  let value = cookie.slice(separator + 1).trim();
+  if (value.startsWith('"') || value.endsWith('"')) {
+    if (value.length < 2 || !value.startsWith('"') || !value.endsWith('"')) {
+      throw malformedCookieHeader();
+    }
+    value = value.slice(1, -1);
+  }
+  if (!cookieValuePattern.test(value)) throw malformedCookieHeader();
+
+  try {
+    return [name, decodeURIComponent(value)];
+  } catch {
+    throw malformedCookieHeader();
   }
 }
 

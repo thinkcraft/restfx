@@ -4,6 +4,7 @@ import {
   getResourceMiddlewares,
   getResourceMetadata,
   type HttpMiddlewareHandler,
+  type NestedResourceMetadata,
 } from "../metadata/ResourceMetadata.js";
 import { Route } from "./Route.js";
 import { HttpRouterResult } from "./HttpRouterResult.js";
@@ -90,18 +91,7 @@ export class HttpRouter {
     const path = context.req.path;
     const method = context.req.method;
     const matches = this._routes.match(path);
-    if (matches.length > 1) {
-      matches.sort(
-        (left, right) =>
-          right.route.specificity - left.route.specificity ||
-          left.order - right.order,
-      );
-    }
-    const match =
-      matches.find((candidate) => candidate.route.method === method) ??
-      (method === "HEAD"
-        ? matches.find((candidate) => candidate.route.method === "GET")
-        : undefined);
+    const match = findRouteMatch(matches, method);
 
     if (!match) {
       const allowedMethods = this.getAllowedMethods(matches);
@@ -244,44 +234,13 @@ export class HttpRouter {
       }
 
       const children = [...(metadata?.children ?? [])];
-      const addDecoratedChildren = (
-        owner: Record<PropertyKey, unknown>,
-        isStatic: boolean,
-      ) => {
-        for (const key of Reflect.ownKeys(owner)) {
-          if (
-            isStatic &&
-            (key === "prototype" || key === "name" || key === "length")
-          ) {
-            continue;
-          }
-          if (
-            children.some(
-              (child) => child.key === key && child.isStatic === isStatic,
-            )
-          ) {
-            continue;
-          }
-          const descriptor = Object.getOwnPropertyDescriptor(owner, key);
-          if (!descriptor || !("value" in descriptor)) continue;
-          const value = descriptor.value;
-          const childConstructor =
-            typeof value === "function"
-              ? value
-              : value !== null && typeof value === "object"
-                ? value.constructor
-                : undefined;
-          if (
-            typeof childConstructor !== "function" ||
-            !getResourceMetadata(childConstructor)
-          ) {
-            continue;
-          }
-          children.push({ key, isStatic });
-        }
-      };
-      addDecoratedChildren(resource as Record<PropertyKey, unknown>, false);
       addDecoratedChildren(
+        children,
+        resource as Record<PropertyKey, unknown>,
+        false,
+      );
+      addDecoratedChildren(
+        children,
         constructor as unknown as Record<PropertyKey, unknown>,
         true,
       );
@@ -326,6 +285,77 @@ export class HttpRouter {
 
     return routes;
   }
+}
+
+function findRouteMatch(
+  matches: ReturnType<RadixRouter["match"]>,
+  method: string,
+) {
+  if (matches.length > 1) {
+    matches.sort(
+      (left, right) =>
+        right.route.specificity - left.route.specificity ||
+        left.order - right.order,
+    );
+  }
+  return (
+    matches.find((candidate) => candidate.route.method === method) ??
+    (method === "HEAD"
+      ? matches.find((candidate) => candidate.route.method === "GET")
+      : undefined)
+  );
+}
+
+function addDecoratedChildren(
+  children: NestedResourceMetadata[],
+  owner: Record<PropertyKey, unknown>,
+  isStatic: boolean,
+) {
+  for (const key of Reflect.ownKeys(owner)) {
+    if (
+      isExcludedStaticProperty(key, isStatic) ||
+      childAlreadyRegistered(children, key, isStatic)
+    ) {
+      continue;
+    }
+    if (isDecoratedResourceProperty(owner, key))
+      children.push({ key, isStatic });
+  }
+}
+
+function isExcludedStaticProperty(key: PropertyKey, isStatic: boolean) {
+  return (
+    isStatic && (key === "prototype" || key === "name" || key === "length")
+  );
+}
+
+function childAlreadyRegistered(
+  children: NestedResourceMetadata[],
+  key: PropertyKey,
+  isStatic: boolean,
+) {
+  return children.some(
+    (child) => child.key === key && child.isStatic === isStatic,
+  );
+}
+
+function isDecoratedResourceProperty(
+  owner: Record<PropertyKey, unknown>,
+  key: PropertyKey,
+) {
+  const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+  if (!descriptor || !("value" in descriptor)) return false;
+  const value = descriptor.value;
+  const childConstructor =
+    typeof value === "function"
+      ? value
+      : value !== null && typeof value === "object"
+        ? value.constructor
+        : undefined;
+  return (
+    typeof childConstructor === "function" &&
+    Boolean(getResourceMetadata(childConstructor))
+  );
 }
 
 type MiddlewareOutcome<T> =

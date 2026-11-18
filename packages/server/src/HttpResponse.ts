@@ -35,61 +35,71 @@ export class HttpResponse {
       this.res.setHeader(name, headerValue);
     }
 
+    await this.sendBody(body, headRequest);
+  }
+
+  private async sendBody(body: unknown, headRequest: boolean) {
     if (
       body === undefined ||
       this.res.statusCode === HttpStatusCode.NoContent ||
       this.res.statusCode === HttpStatusCode.NotModified
     ) {
       this.res.end();
-    } else if (typeof body === "string" || Buffer.isBuffer(body)) {
-      if (!this.res.hasHeader(HttpHeaderName.ContentType)) {
-        this.res.setHeader(
-          HttpHeaderName.ContentType,
-          `${HttpMediaType.TextPlain}; charset=utf-8`,
-        );
-      }
-      if (headRequest) {
-        if (!this.res.hasHeader(HttpHeaderName.ContentLength)) {
-          this.res.setHeader(
-            HttpHeaderName.ContentLength,
-            Buffer.isBuffer(body) ? body.byteLength : Buffer.byteLength(body),
-          );
-        }
-        this.res.end();
-      } else {
-        this.res.end(body);
-      }
-    } else if (isAsyncIterable(body)) {
-      if (headRequest) {
-        this.res.end();
-      } else {
-        await this.sendStream(body);
-      }
-    } else if (isHttpResponseBodyWriter(body)) {
-      if (headRequest) {
-        this.res.end();
-      } else {
-        await this.sendWriter(body);
-      }
+      return;
+    }
+    if (typeof body === "string" || Buffer.isBuffer(body)) {
+      this.sendText(body, headRequest);
+      return;
+    }
+    if (isAsyncIterable(body)) {
+      if (headRequest) this.res.end();
+      else await this.sendStream(body);
+      return;
+    }
+    if (isHttpResponseBodyWriter(body)) {
+      if (headRequest) this.res.end();
+      else await this.sendWriter(body);
+      return;
+    }
+    this.sendJson(body, headRequest);
+  }
+
+  private sendText(body: string | Buffer, headRequest: boolean) {
+    this.setContentTypeIfMissing(`${HttpMediaType.TextPlain}; charset=utf-8`);
+    if (headRequest) {
+      this.setContentLengthIfMissing(
+        Buffer.isBuffer(body) ? body.byteLength : Buffer.byteLength(body),
+      );
+      this.res.end();
     } else {
-      const output = JSON.stringify(body);
-      if (!this.res.hasHeader(HttpHeaderName.ContentType)) {
-        this.res.setHeader(
-          HttpHeaderName.ContentType,
-          `${HttpMediaType.ApplicationJson}; charset=utf-8`,
-        );
-      }
-      if (headRequest) {
-        if (!this.res.hasHeader(HttpHeaderName.ContentLength)) {
-          this.res.setHeader(
-            HttpHeaderName.ContentLength,
-            output === undefined ? 0 : Buffer.byteLength(output),
-          );
-        }
-        this.res.end();
-      } else {
-        this.res.end(output);
-      }
+      this.res.end(body);
+    }
+  }
+
+  private sendJson(body: unknown, headRequest: boolean) {
+    const output = JSON.stringify(body);
+    this.setContentTypeIfMissing(
+      `${HttpMediaType.ApplicationJson}; charset=utf-8`,
+    );
+    if (headRequest) {
+      this.setContentLengthIfMissing(
+        output === undefined ? 0 : Buffer.byteLength(output),
+      );
+      this.res.end();
+    } else {
+      this.res.end(output);
+    }
+  }
+
+  private setContentTypeIfMissing(value: string) {
+    if (!this.res.hasHeader(HttpHeaderName.ContentType)) {
+      this.res.setHeader(HttpHeaderName.ContentType, value);
+    }
+  }
+
+  private setContentLengthIfMissing(value: number) {
+    if (!this.res.hasHeader(HttpHeaderName.ContentLength)) {
+      this.res.setHeader(HttpHeaderName.ContentLength, value);
     }
   }
 

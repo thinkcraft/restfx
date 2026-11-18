@@ -70,59 +70,64 @@ function normalizeHeaders(options: SecurityHeadersMiddlewareOptions) {
     headers.set(name.toLowerCase(), [name, value]);
   }
 
-  if (options.headers !== undefined) {
-    if (
-      options.headers === null ||
-      typeof options.headers !== "object" ||
-      Array.isArray(options.headers)
-    ) {
-      throw new TypeError("Security headers must be provided as an object");
-    }
-
-    for (const [name, value] of Object.entries(options.headers)) {
-      if (!httpTokenPattern.test(name)) {
-        throw new TypeError(`Invalid security header name: ${name}`);
-      }
-      const normalizedName = name.toLowerCase();
-      if (value === false) {
-        headers.delete(normalizedName);
-      } else if (
-        typeof value !== "string" ||
-        invalidHeaderValuePattern.test(value)
-      ) {
-        throw new TypeError(`Invalid value for security header: ${name}`);
-      } else {
-        headers.set(normalizedName, [name, value]);
-      }
-    }
-  }
-
-  if (options.contentSecurityPolicy !== undefined) {
-    if (options.contentSecurityPolicy === false) {
-      headers.delete("content-security-policy");
-    } else {
-      headers.set("content-security-policy", [
-        "Content-Security-Policy",
-        validateHeaderValue(
-          "Content-Security-Policy",
-          options.contentSecurityPolicy,
-        ),
-      ]);
-    }
-  }
-
-  if (options.strictTransportSecurity !== undefined) {
-    if (options.strictTransportSecurity === false) {
-      headers.delete("strict-transport-security");
-    } else {
-      headers.set("strict-transport-security", [
-        "Strict-Transport-Security",
-        createStrictTransportSecurityValue(options.strictTransportSecurity),
-      ]);
-    }
-  }
+  applyCustomHeaders(headers, options.headers);
+  applyDedicatedHeader(
+    headers,
+    "content-security-policy",
+    "Content-Security-Policy",
+    options.contentSecurityPolicy,
+    (value) => validateHeaderValue("Content-Security-Policy", value),
+  );
+  applyDedicatedHeader(
+    headers,
+    "strict-transport-security",
+    "Strict-Transport-Security",
+    options.strictTransportSecurity,
+    createStrictTransportSecurityValue,
+  );
 
   return [...headers.values()];
+}
+
+function applyCustomHeaders(
+  headers: Map<string, readonly [string, string]>,
+  values: SecurityHeadersMiddlewareOptions["headers"],
+) {
+  if (values === undefined) return;
+  if (values === null || typeof values !== "object" || Array.isArray(values)) {
+    throw new TypeError("Security headers must be provided as an object");
+  }
+  for (const [name, value] of Object.entries(values)) {
+    if (!httpTokenPattern.test(name)) {
+      throw new TypeError(`Invalid security header name: ${name}`);
+    }
+    const normalizedName = name.toLowerCase();
+    if (value === false) {
+      headers.delete(normalizedName);
+    } else if (
+      typeof value !== "string" ||
+      invalidHeaderValuePattern.test(value)
+    ) {
+      throw new TypeError(`Invalid value for security header: ${name}`);
+    } else {
+      headers.set(normalizedName, [name, value]);
+    }
+  }
+}
+
+function applyDedicatedHeader<T>(
+  headers: Map<string, readonly [string, string]>,
+  normalizedName: string,
+  name: string,
+  value: T | false | undefined,
+  normalize: (value: T) => string,
+) {
+  if (value === undefined) return;
+  if (value === false) {
+    headers.delete(normalizedName);
+    return;
+  }
+  headers.set(normalizedName, [name, normalize(value)]);
 }
 
 function validateHeaderValue(name: string, value: unknown) {

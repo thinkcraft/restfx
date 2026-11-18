@@ -12,6 +12,7 @@ import {
   getModelMetadata,
   IntegerField,
   ModelValidationError,
+  type ModelFieldSource,
   NumberField,
   validateModel,
   type ModelConstructor,
@@ -223,33 +224,7 @@ export class HttpRequest {
       }
       const fieldType = field.type;
       const name = source.name ?? source.property;
-      let value: unknown;
-      switch (source.source) {
-        case "path":
-          value = this.params[name];
-          break;
-        case "query": {
-          const values = this.url.searchParams.getAll(name);
-          if (values.length > 0) {
-            value = hasArrayFieldType(fieldType)
-              ? values
-              : values.length === 1
-                ? values[0]
-                : values;
-          }
-          break;
-        }
-        case "header": {
-          const header = this.headers[name.toLowerCase()];
-          if (header !== undefined) {
-            value =
-              hasArrayFieldType(fieldType) && !Array.isArray(header)
-                ? [header]
-                : header;
-          }
-          break;
-        }
-      }
+      const value = this.getRequestFieldValue(source.source, name, fieldType);
       if (value !== undefined) {
         input[source.property] = coerceRequestValue(value, fieldType);
       }
@@ -264,6 +239,27 @@ export class HttpRequest {
     }
 
     return this.validateRequestModel(input, model);
+  }
+
+  private getRequestFieldValue(
+    source: ModelFieldSource,
+    name: string,
+    fieldType: Function,
+  ) {
+    if (source === "body") return undefined;
+    if (source === "path") return this.params[name];
+    if (source === "query") {
+      const values = this.url.searchParams.getAll(name);
+      if (values.length === 0) return undefined;
+      if (hasArrayFieldType(fieldType)) return values;
+      return values.length === 1 ? values[0] : values;
+    }
+
+    const header = this.headers[name.toLowerCase()];
+    if (header === undefined) return undefined;
+    return hasArrayFieldType(fieldType) && !Array.isArray(header)
+      ? [header]
+      : header;
   }
 
   private validateRequestModel<T>(input: unknown, model: ModelConstructor<T>) {

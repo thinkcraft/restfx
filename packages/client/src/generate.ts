@@ -172,6 +172,76 @@ function generateOperation(
   imports: Set<string>,
   methodName: string,
 ) {
+  const metadata = getOperationMetadata(
+    path,
+    method,
+    operation,
+    schemas,
+    modelAliases,
+    imports,
+  );
+  const {
+    fields,
+    parameters,
+    requestModel,
+    bodyModel,
+    bodyProperty,
+    requestBody,
+    requestContentType,
+    hasInput,
+    inputType,
+    responseType,
+    responseContentTypes,
+    emptySuccessStatuses,
+  } = metadata;
+  const lines = [
+    `${methodName}: async (${hasInput ? `input: ${inputType}` : ""}): Promise<${responseType}> => {`,
+  ];
+  appendModelInputLines(
+    lines,
+    fields,
+    requestModel,
+    bodyModel,
+    bodyProperty,
+    requestContentType,
+  );
+  appendBodyLines(
+    lines,
+    requestModel,
+    bodyModel,
+    bodyProperty,
+    requestContentType,
+  );
+
+  const pathExpression = createPathExpression(
+    path,
+    parameters,
+    fields,
+    Boolean(requestModel),
+  );
+  lines.push(`  const url = runtime.createUrl(${pathExpression});`);
+  appendParameterLines(lines, parameters, fields, Boolean(requestModel));
+  appendHeaderLines(lines, parameters, requestContentType);
+
+  const requestBodyValue = bodyModel ? "body" : "input.body";
+  const bodyExpression = requestBody
+    ? serializeRequestBody(requestBodyValue, requestContentType)
+    : undefined;
+  lines.push(
+    `  return await runtime.sendRequest<${responseType}>(url, { method: ${JSON.stringify(method)}, headers${bodyExpression ? `, body: ${bodyExpression}` : ""} }, ${JSON.stringify(responseContentTypes[0] ?? "")}, ${JSON.stringify(responseType === "void" ? [] : emptySuccessStatuses)}, ${responseType !== "void"});`,
+  );
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function getOperationMetadata(
+  path: string,
+  method: string,
+  operation: JsonObject,
+  schemas: Record<string, JsonObject>,
+  modelAliases: Map<string, string>,
+  imports: Set<string>,
+) {
   const clientMetadata = operation["x-restfx-client"] ?? {};
   const requestModelRef = clientMetadata.requestModel?.$ref as
     string | undefined;
@@ -195,18 +265,7 @@ function generateOperation(
     );
   }
   if (requestModel) {
-    for (const parameter of parameters) {
-      if (
-        !fields.some(
-          (field) =>
-            field.source === parameter.in && field.name === parameter.name,
-        )
-      ) {
-        throw new TypeError(
-          `${method} ${path} has an OpenAPI parameter ${parameter.in}:${parameter.name} not represented by its request model`,
-        );
-      }
-    }
+    validateRequestModelParameters(path, method, parameters, fields);
   }
 
   const bodyMetadata = clientMetadata.body;
@@ -228,33 +287,18 @@ function generateOperation(
   const bodyProperty = bodyMetadata?.property ?? "body";
 
   const hasInput = Boolean(requestModel || parameters.length || requestBody);
-  let inputType = "";
-  if (requestModel) {
-    inputType = requestModel;
-    if (requestBody && !bodyModel) {
-      inputType += ` & ${createInputType(
-        [],
-        requestBody,
-        requestContentType,
-        undefined,
-        requestSchema,
-        schemas,
-        modelAliases,
-        imports,
-      )}`;
-    }
-  } else if (hasInput) {
-    inputType = createInputType(
-      parameters,
-      requestBody,
-      requestContentType,
-      bodyModel,
-      requestSchema,
-      schemas,
-      modelAliases,
-      imports,
-    );
-  }
+  const inputType = createOperationInputType(
+    requestModel,
+    hasInput,
+    requestBody,
+    parameters,
+    requestContentType,
+    bodyModel,
+    requestSchema,
+    schemas,
+    modelAliases,
+    imports,
+  );
 
   const responseType = getResponseType(
     operation.responses ?? {},
@@ -275,56 +319,144 @@ function generateOperation(
     .map(([status]) => status)
     .filter((status) => /^2\d\d$/.test(status))
     .map((status) => Number(status));
-  const lines: string[] = [];
-  lines.push(
-    `${methodName}: async (${hasInput ? `input: ${inputType}` : ""}): Promise<${responseType}> => {`,
-  );
-
-  if (requestModel) {
-    lines.push(
-      `  const requestInput = runtime.copyDefinedProperties(input, ${JSON.stringify(fields.map(({ property }) => property))});`,
-    );
-    if (bodyModel) {
-      appendBodyInputLines(
-        lines,
-        `Reflect.get(input, ${JSON.stringify(bodyProperty)})`,
-        requestContentType,
-      );
-      lines.push(
-        `  if (Object.hasOwn(input, ${JSON.stringify(bodyProperty)})) requestInput[${JSON.stringify(bodyProperty)}] = bodyInput;`,
-      );
-    }
-    lines.push(
-      `  const request = validateModel(requestInput, ${requestModel});`,
-    );
-  }
-  if (bodyModel) {
-    if (requestModel) {
-      lines.push(`  const body = request[${JSON.stringify(bodyProperty)}];`);
-    } else {
-      appendBodyInputLines(lines, "input.body", requestContentType);
-      lines.push(`  const body = validateModel(bodyInput, ${bodyModel});`);
-    }
-  }
-
-  const pathExpression = createPathExpression(
-    path,
-    parameters,
+  return {
     fields,
-    Boolean(requestModel),
+    parameters,
+    requestModel,
+    bodyModel,
+    bodyProperty,
+    requestBody,
+    requestContentType,
+    hasInput,
+    inputType,
+    responseType,
+    responseContentTypes,
+    emptySuccessStatuses,
+  };
+}
+
+function validateRequestModelParameters(
+  path: string,
+  method: string,
+  parameters: JsonObject[],
+  fields: Array<{ property: string; source: string; name: string }>,
+) {
+  const unmatched = parameters.find(
+    (parameter) =>
+      !fields.some(
+        (field) =>
+          field.source === parameter.in && field.name === parameter.name,
+      ),
   );
-  lines.push(`  const url = runtime.createUrl(${pathExpression});`);
+  if (unmatched) {
+    throw new TypeError(
+      `${method} ${path} has an OpenAPI parameter ${unmatched.in}:${unmatched.name} not represented by its request model`,
+    );
+  }
+}
+
+function createOperationInputType(
+  requestModel: string | undefined,
+  hasInput: boolean,
+  requestBody: JsonObject | undefined,
+  parameters: JsonObject[],
+  requestContentType: string | undefined,
+  bodyModel: string | undefined,
+  requestSchema: JsonObject | undefined,
+  schemas: Record<string, JsonObject>,
+  modelAliases: Map<string, string>,
+  imports: Set<string>,
+) {
+  if (requestModel) {
+    if (!requestBody || bodyModel) return requestModel;
+    return `${requestModel} & ${createInputType(
+      [],
+      requestBody,
+      requestContentType,
+      undefined,
+      requestSchema,
+      schemas,
+      modelAliases,
+      imports,
+    )}`;
+  }
+  if (!hasInput) return "";
+  return createInputType(
+    parameters,
+    requestBody,
+    requestContentType,
+    bodyModel,
+    requestSchema,
+    schemas,
+    modelAliases,
+    imports,
+  );
+}
+
+function appendModelInputLines(
+  lines: string[],
+  fields: Array<{ property: string; source: string; name: string }>,
+  requestModel: string | undefined,
+  bodyModel: string | undefined,
+  bodyProperty: string,
+  requestContentType: string | undefined,
+) {
+  if (!requestModel) return;
+  lines.push(
+    `  const requestInput = runtime.copyDefinedProperties(input, ${JSON.stringify(fields.map(({ property }) => property))});`,
+  );
+  if (bodyModel) {
+    appendBodyInputLines(
+      lines,
+      `Reflect.get(input, ${JSON.stringify(bodyProperty)})`,
+      requestContentType,
+    );
+    lines.push(
+      `  if (Object.hasOwn(input, ${JSON.stringify(bodyProperty)})) requestInput[${JSON.stringify(bodyProperty)}] = bodyInput;`,
+    );
+  }
+  lines.push(`  const request = validateModel(requestInput, ${requestModel});`);
+}
+
+function appendBodyLines(
+  lines: string[],
+  requestModel: string | undefined,
+  bodyModel: string | undefined,
+  bodyProperty: string,
+  requestContentType: string | undefined,
+) {
+  if (!bodyModel) return;
+  if (requestModel) {
+    lines.push(`  const body = request[${JSON.stringify(bodyProperty)}];`);
+    return;
+  }
+  appendBodyInputLines(lines, "input.body", requestContentType);
+  lines.push(`  const body = validateModel(bodyInput, ${bodyModel});`);
+}
+
+function appendParameterLines(
+  lines: string[],
+  parameters: JsonObject[],
+  fields: Array<{ property: string; source: string; name: string }>,
+  hasRequestModel: boolean,
+) {
   for (const [index, parameter] of parameters.entries()) {
-    const access = getParameterAccess(parameter, fields, Boolean(requestModel));
+    const access = getParameterAccess(parameter, fields, hasRequestModel);
     if (parameter.in === "query") {
       lines.push(
         `  runtime.appendQuery(url, ${JSON.stringify(parameter.name)}, ${access});`,
       );
     } else if (parameter.in === "header") {
-      // Header setup is emitted below, preserving repeated values as comma-separated.
       lines.push(`  const header_${index} = ${access};`);
     }
   }
+}
+
+function appendHeaderLines(
+  lines: string[],
+  parameters: JsonObject[],
+  requestContentType: string | undefined,
+) {
   lines.push("  const headers = new Headers();");
   for (const [index, parameter] of parameters.entries()) {
     if (parameter.in !== "header") continue;
@@ -333,25 +465,14 @@ function generateOperation(
       `  if (${local} !== undefined) headers.set(${JSON.stringify(parameter.name)}, Array.isArray(${local}) ? ${local}.join(",") : String(${local}));`,
     );
   }
-  if (requestContentType) {
-    if (isMultipartContentType(requestContentType)) {
-      lines.push('  headers.delete("content-type");');
-    } else {
-      lines.push(
-        `  headers.set("content-type", ${JSON.stringify(requestContentType)});`,
-      );
-    }
+  if (!requestContentType) return;
+  if (isMultipartContentType(requestContentType)) {
+    lines.push('  headers.delete("content-type");');
+  } else {
+    lines.push(
+      `  headers.set("content-type", ${JSON.stringify(requestContentType)});`,
+    );
   }
-
-  const requestBodyValue = bodyModel ? "body" : "input.body";
-  const bodyExpression = requestBody
-    ? serializeRequestBody(requestBodyValue, requestContentType)
-    : undefined;
-  lines.push(
-    `  return await runtime.sendRequest<${responseType}>(url, { method: ${JSON.stringify(method)}, headers${bodyExpression ? `, body: ${bodyExpression}` : ""} }, ${JSON.stringify(responseContentTypes[0] ?? "")}, ${JSON.stringify(responseType === "void" ? [] : emptySuccessStatuses)}, ${responseType !== "void"});`,
-  );
-  lines.push("}");
-  return lines.join("\n");
 }
 
 function appendBodyInputLines(
@@ -484,63 +605,100 @@ function schemaToType(
   imports: Set<string>,
 ): string {
   if (schema.format === "binary") return "Blob";
-  if (schema.$ref) {
-    const alias = modelAliases.get(schema.$ref);
-    if (alias) {
-      imports.add(alias);
-      return alias;
-    }
-    const name = schema.$ref.split("/").at(-1)!;
-    const target = schemas[name];
-    if (target) return schemaToType(target, schemas, modelAliases, imports);
-    return "unknown";
-  }
+  if (schema.$ref)
+    return referenceToType(schema.$ref, schemas, modelAliases, imports);
   if (schema.const !== undefined) return JSON.stringify(schema.const);
-  if (Array.isArray(schema.enum))
-    return (
-      schema.enum.map((value: unknown) => JSON.stringify(value)).join(" | ") ||
-      "never"
-    );
+  if (Array.isArray(schema.enum)) return enumToType(schema.enum);
   const alternatives = schema.anyOf ?? schema.oneOf ?? schema.allOf;
-  if (Array.isArray(alternatives)) {
-    const separator = schema.allOf ? " & " : " | ";
-    return alternatives
-      .map((part: JsonObject) =>
-        schemaToType(part, schemas, modelAliases, imports),
-      )
-      .join(separator);
-  }
-  if (schema.type === "array") {
-    const itemType = schemaToType(
-      schema.items ?? {},
+  if (Array.isArray(alternatives))
+    return alternativesToType(
+      alternatives,
+      schema.allOf,
       schemas,
       modelAliases,
       imports,
     );
-    return `(${itemType})[]`;
-  }
-  if (schema.type === "object" || schema.properties) {
-    const required = new Set<string>(schema.required ?? []);
-    const properties = Object.entries<JsonObject>(schema.properties ?? {}).map(
-      ([name, property]) =>
-        `${JSON.stringify(name)}${required.has(name) ? "" : "?"}: ${schemaToType(property, schemas, modelAliases, imports)}`,
-    );
-    if (
-      schema.additionalProperties &&
-      typeof schema.additionalProperties === "object"
-    ) {
-      properties.push(
-        `[key: string]: ${schemaToType(schema.additionalProperties, schemas, modelAliases, imports)}`,
-      );
-    }
-    return properties.length
-      ? `{ ${properties.join("; ")} }`
-      : "Record<string, unknown>";
-  }
+  if (schema.type === "array")
+    return arraySchemaToType(schema, schemas, modelAliases, imports);
+  if (schema.type === "object" || schema.properties)
+    return objectSchemaToType(schema, schemas, modelAliases, imports);
   if (Array.isArray(schema.type)) {
     return schema.type.map((type: string) => primitiveType(type)).join(" | ");
   }
   return primitiveType(schema.type);
+}
+
+function referenceToType(
+  reference: string,
+  schemas: Record<string, JsonObject>,
+  modelAliases: Map<string, string>,
+  imports: Set<string>,
+) {
+  const alias = modelAliases.get(reference);
+  if (alias) {
+    imports.add(alias);
+    return alias;
+  }
+  const target = schemas[reference.split("/").at(-1)!];
+  return target
+    ? schemaToType(target, schemas, modelAliases, imports)
+    : "unknown";
+}
+
+function enumToType(values: unknown[]) {
+  return values.map((value) => JSON.stringify(value)).join(" | ") || "never";
+}
+
+function alternativesToType(
+  alternatives: JsonObject[],
+  intersection: unknown,
+  schemas: Record<string, JsonObject>,
+  modelAliases: Map<string, string>,
+  imports: Set<string>,
+) {
+  const separator = intersection ? " & " : " | ";
+  return alternatives
+    .map((part) => schemaToType(part, schemas, modelAliases, imports))
+    .join(separator);
+}
+
+function arraySchemaToType(
+  schema: JsonObject,
+  schemas: Record<string, JsonObject>,
+  modelAliases: Map<string, string>,
+  imports: Set<string>,
+) {
+  const itemType = schemaToType(
+    schema.items ?? {},
+    schemas,
+    modelAliases,
+    imports,
+  );
+  return `(${itemType})[]`;
+}
+
+function objectSchemaToType(
+  schema: JsonObject,
+  schemas: Record<string, JsonObject>,
+  modelAliases: Map<string, string>,
+  imports: Set<string>,
+) {
+  const required = new Set<string>(schema.required ?? []);
+  const properties = Object.entries<JsonObject>(schema.properties ?? {}).map(
+    ([name, property]) =>
+      `${JSON.stringify(name)}${required.has(name) ? "" : "?"}: ${schemaToType(property, schemas, modelAliases, imports)}`,
+  );
+  if (
+    schema.additionalProperties &&
+    typeof schema.additionalProperties === "object"
+  ) {
+    properties.push(
+      `[key: string]: ${schemaToType(schema.additionalProperties, schemas, modelAliases, imports)}`,
+    );
+  }
+  return properties.length
+    ? `{ ${properties.join("; ")} }`
+    : "Record<string, unknown>";
 }
 
 function primitiveType(type: string | undefined) {

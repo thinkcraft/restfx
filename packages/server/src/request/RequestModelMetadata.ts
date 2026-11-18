@@ -1,5 +1,9 @@
 import { getModelMetadata } from "@restfx/core";
-import type { ModelConstructor, ModelFieldSource } from "@restfx/core";
+import type {
+  ModelConstructor,
+  ModelFieldMetadata,
+  ModelFieldSource,
+} from "@restfx/core";
 import type { HttpRequestBodyOptions } from "../openapi/types.js";
 
 const requestBodyOptionsMetadata = Symbol("restfx.server.requestBodyOptions");
@@ -67,26 +71,16 @@ export function getRequestModelMetadata(
   const bodyOptions = getInheritedBodyOptions(model);
   const fields: HttpRequestFieldMetadata[] = [];
   for (const [property, field] of modelMetadata.fields) {
-    if (!field.source) continue;
-    const extra = bodyOptions.get(property);
-    const description = field.source === "body" ? field.description : undefined;
-    fields.push({
-      property,
-      source: field.source,
-      ...(field.sourceName !== undefined ? { name: field.sourceName } : {}),
-      ...(field.model ? { model: field.model } : {}),
-      ...(description || extra?.bodyOptions
-        ? {
-            bodyOptions: {
-              ...(description ? { description } : {}),
-              ...extra?.bodyOptions,
-            },
-          }
-        : {}),
-      ...(extra?.bodyMaxBytes !== undefined
-        ? { bodyMaxBytes: extra.bodyMaxBytes }
-        : {}),
-    });
+    const source = field.source;
+    if (!source) continue;
+    fields.push(
+      createRequestFieldMetadata(
+        property,
+        source,
+        field,
+        bodyOptions.get(property),
+      ),
+    );
   }
 
   const bodies = fields.filter((field) => field.source === "body");
@@ -98,6 +92,33 @@ export function getRequestModelMetadata(
   return {
     fields: fields.filter((field) => field.source !== "body"),
     body: bodies[0],
+  };
+}
+
+function createRequestFieldMetadata(
+  property: string,
+  source: ModelFieldSource,
+  field: ModelFieldMetadata,
+  extra:
+    Omit<HttpRequestFieldMetadata, "property" | "source" | "model"> | undefined,
+): HttpRequestFieldMetadata {
+  const description = source === "body" ? field.description : undefined;
+  return {
+    property,
+    source,
+    ...(field.sourceName !== undefined ? { name: field.sourceName } : {}),
+    ...(field.model ? { model: field.model } : {}),
+    ...(description || extra?.bodyOptions
+      ? {
+          bodyOptions: {
+            ...(description ? { description } : {}),
+            ...extra?.bodyOptions,
+          },
+        }
+      : {}),
+    ...(extra?.bodyMaxBytes !== undefined
+      ? { bodyMaxBytes: extra.bodyMaxBytes }
+      : {}),
   };
 }
 
